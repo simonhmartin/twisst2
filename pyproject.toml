@@ -1,0 +1,18 @@
+[project]
+name = "twisst2"
+authors = [{name = "Simon Martin", email = "simon.martin@ed.ac.uk"}]
+description = "Topology weighting from unphased genotypes of any ploidy"
+readme = "README.md"
+requires-python = ">=3.7"
+dynamic = ["version"]
+# version = "0.0.1"
+dependencies = ["numpy >= 1.21.5", "cyvcf2"]
+
+[tool.setuptools.dynamic]
+version = {attr = "twisst2.__version__"}
+
+[project.scripts]
+twisst2 = "twisst2.twisst2:main"
+
+[tool.setuptools]
+packages = ["twisst2"]
