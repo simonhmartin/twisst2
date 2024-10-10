@@ -9,7 +9,10 @@ import numpy as np
 from twisst2.TopologySummary import *
 from sticcs import sticcs
 import cyvcf2
-#import tskit
+
+try: import tskit
+except ImportError:
+    pass
 
 def comboGen(groups, max_iterations):
     n_combos = np.prod([len(t) for t in groups])
@@ -317,7 +320,7 @@ def get_topocounts(trees, n_trees, groups, max_iterations, simplify=True, group_
 
 
 def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_iterations, group_names=None,
-                                   unrooted=False, second_chances=False, multi_pass=True, chrom_start=None, chrom_len=None):
+                                   unrooted=False, second_chances=False, multi_pass=True, chrom_start=None, chrom_len=None, silent=True):
     
     comboGenerator = comboGen(groups, max_iterations = max_iterations)
     
@@ -348,9 +351,9 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
         patterns, matches, n_matches  = sticcs.get_patterns_and_matches(der_counts_sub)
         
         clusters = sticcs.get_clusters(patterns, matches, positions_sub, ploidies=ploidies_sub, second_chances=second_chances,
-                                       seq_start=chrom_start, seq_len=chrom_len, silent=True)
+                                       seq_start=chrom_start, seq_len=chrom_len, silent=silent)
         
-        trees = sticcs.infer_trees(patterns, ploidies_sub, clusters, multi_pass = multi_pass, silent=True)
+        trees = sticcs.infer_trees(patterns, ploidies_sub, clusters, multi_pass = multi_pass, silent=silent)
         
         print(f"\nCounting topologies for iteration {iteration}.", file=sys.stderr, flush=True)
         
@@ -426,6 +429,7 @@ def main():
         groups = [g.split(",") for g in args.groups]
     
     elif args.groups_file:
+        groups = [[]]*ngroups
         with open(args.groups_file, "rt") as gf: groupDict = dict([ln.split() for ln in gf.readlines()])
         for sample in groupDict.keys():
             try: groups[group_names.index(groupDict[sample])].append(sample)
@@ -482,7 +486,8 @@ def main():
                                                             group_names=group_names, max_iterations=args.max_iterations,
                                                             unrooted=args.unrooted, multi_pass=not args.single_pass,
                                                             second_chances = args.allow_second_chances,
-                                                            chrom_start=1, chrom_len=chromLenDict[chrom])
+                                                            chrom_start=1, chrom_len=chromLenDict[chrom]
+                                                            silent= not args.verbose)
         
         #could potnentially add step merging identical intervals here
         
