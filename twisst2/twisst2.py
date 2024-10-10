@@ -486,7 +486,7 @@ def main():
                                                             group_names=group_names, max_iterations=args.max_iterations,
                                                             unrooted=args.unrooted, multi_pass=not args.single_pass,
                                                             second_chances = args.allow_second_chances,
-                                                            chrom_start=1, chrom_len=chromLenDict[chrom]
+                                                            chrom_start=1, chrom_len=chromLenDict[chrom],
                                                             silent= not args.verbose)
         
         #could potnentially add step merging identical intervals here
