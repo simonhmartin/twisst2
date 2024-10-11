@@ -328,6 +328,9 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
     
     for iteration,combo in enumerate(comboGenerator):
         
+        if not silent:
+            print(f"\nIteration {iteration} sample indices: {', '.join([str(idx) for idx in combo])}")
+        
         print(f"\nInferring treesequence for iteration {iteration}.", file=sys.stderr, flush=True)
         
         der_counts_sub = der_counts[:, combo]
@@ -434,6 +437,10 @@ def main():
         for sample in groupDict.keys():
             try: groups[group_names.index(groupDict[sample])].append(sample)
             except: pass
+    
+    if args.verbose:
+        for i in range(ngroups):
+            print(f"{group_names[i]}: {', '.join(groups[i])}\n", file=sys.stderr)
     
     assert min([len(g) for g in groups]) >= 1, "Please specify at least one sample ID per group."
     
