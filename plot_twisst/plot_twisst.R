@@ -120,12 +120,11 @@ topo_cols <- c(
 ########### Below are some more object-oriented tools for working with standard twisst output files
 
 library(ape)
-library(data.table)
 library(tools)
 
 #a function that imports topocounts and computes weights 
 import.twisst <- function(topocounts_files, intervals_files=NULL, split_by_chrom=TRUE, reorder_by_start=FALSE, na.rm=TRUE, max_interval=Inf,
-                          lengths=NULL, topos_file=NULL, ignore_extra_columns=FALSE, min_combos=1, recalculate_mid=FALSE, names=NULL){
+                          lengths=NULL, topos_file=NULL, ignore_extra_columns=FALSE, min_subtrees=1, recalculate_mid=FALSE, names=NULL){
     l = list()
     
     if (length(intervals_files) > 1){
@@ -175,13 +174,12 @@ import.twisst <- function(topocounts_files, intervals_files=NULL, split_by_chrom
     #first, check if a topologies file is provided
     if (is.null(topos_file) == FALSE) {
         l$topos <- read.tree(file=topos_file)
-        if (is.null(names(l$topos)) == TRUE) names(l$topos) <- names(l$weights[[1]])
+        if (is.null(names(l$topos)) == TRUE) names(l$topos) <- names(l$topocounts[[1]])
         }
     else{
-        #otherwise we try to retrieve topologies from the (first) weights file
-        n_topos = ncol(l$weights[[1]])
-        if (file_ext(topocounts_files[1]) == "gz") cat="gunzip -c" else cat="cat"
-        topos_text <- try(system(paste(cat, topocounts_files[[1]], "2>/dev/null", "| head -n", n_topos), intern = T), silent=TRUE)
+        #otherwise we try to retrieve topologies from the (first) topocounts file
+        n_topos = ncol(l$topocounts[[1]]) - 1
+        topos_text <- read.table(topocounts_file, nrow=n_topos, comment.char="", sep="\t", as.is=T)[,1]
         try(l$topos <- read.tree(text = topos_text))
         try(names(l$topos) <- sapply(names(l$topos), substring, 2))
         }
@@ -198,8 +196,8 @@ import.twisst <- function(topocounts_files, intervals_files=NULL, split_by_chrom
     if (na.rm==TRUE){
         for (i in 1:l$n_regions){
             #remove rows containing NA values
-            row_sums = apply(l$weights[[i]],1,sum)
-            good_rows = which(is.na(row_sums) == F & row_sums >= min_combos &
+            row_sums = apply(l$topocounts[[i]],1,sum)
+            good_rows = which(is.na(row_sums) == F & row_sums >= min_subtrees &
                               l$interval_data[[i]]$end - l$interval_data[[i]]$start + 1 <= max_interval)
             l$topocounts[[i]] <- l$topocounts[[i]][good_rows,]
             l$interval_data[[i]] = l$interval_data[[i]][good_rows,]
@@ -210,9 +208,12 @@ import.twisst <- function(topocounts_files, intervals_files=NULL, split_by_chrom
     
     l$weights <- sapply(l$topocounts, function(raw) raw/apply(raw, 1, sum), simplify=FALSE)
     
-    l$weights_mean <- lapply(l$weights, apply, 2, mean, na.rm=T)
+    l$weights_mean <- t(sapply(l$weights, apply, 2, mean, na.rm=T))
     
-    l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
+    #weighting per region as a total. This will be used for getting the overall mean
+    weights_totals <- apply(t(sapply(l$weights, apply, 2, sum, na.rm=T)), 2, sum)
+    
+    l$weights_overall_mean <- weights_totals / sum(weights_totals)
     
     if (is.null(lengths) == TRUE) l$lengths <- sapply(l$interval_data, function(df) tail(df$end,1), simplify=TRUE)
     else l$lengths = lengths
@@ -457,7 +458,7 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=
     # Either order 1-15 or order with highest weigted topology first
     
     if (order_by_weights == TRUE) {
-        ord <- order(twisst_object$weights_overall_mean, decreasing=T)
+        ord <- order(twisst_object$weights_overall_mean[1:length(twisst_object$topos)], decreasing=T)
         if (is.null(only_best) == FALSE) ord=ord[1:only_best]
         }
     else ord <- 1:length(twisst_object$topos)
@@ -495,6 +496,8 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
                                 label_offset = 0.05, lwd=NULL, label_alias=NULL, cex=NULL, outline=FALSE,
                                 cex.outline=NULL, lwd.box=NULL, topo_names=NULL){
     
+    library(data.table)
+    
     #check if there are enough colours
     if (length(twisst_object$topos) > length(cols)){
         print("Not enough colours provided (option 'cols'), using rainbow instead")
@@ -504,7 +507,7 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
     # Either order 1-15 or order with highest weigted topology first
     
     if (order_by_weights == TRUE) {
-        ord <- order(twisst_object$weights_overall_mean, decreasing=T)
+        ord <- order(twisst_object$weights_overall_mean[1:length(twisst_object$topos)], decreasing=T)
         if (is.null(only_best) == FALSE) ord=ord[1:only_best]
         }
     else ord <- 1:length(twisst_object$topos)
@@ -547,7 +550,7 @@ subset.twisst.by.topos <- function(twisst_object, topos){
     l$pos <- twisst_object$pos
     l$topocounts <- sapply(regions, function(region) twisst_data$topocounts[[region]][,topos], simplify=F)
     l$weights <- sapply(regions, function(region) twisst_object$weights[[region]][,topos], simplify=F)
-    l$weights_mean <- sapply(regions, function(region) twisst_object$weights_mean[[region]][topos], simplify=F)
+    l$weights_mean <- l$weights_mean[,topos]
     l$weights_overall_mean <- twisst_object$weights_overall_mean[topos]
     l$topos <- twisst_object$topos[topos]
     l
@@ -564,7 +567,8 @@ subset.twisst.by.regions <- function(twisst_object, regions){
     l$topocounts <- twisst_object$topocounts[regions]
     l$weights <- twisst_object$weights[regions]
     l$weights_mean <- twisst_object$weights_mean[regions]
-    l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
+    weights_totals <- apply(t(sapply(l$weights, apply, 2, sum, na.rm=T)), 2, sum)
+    l$weights_overall_mean <- weights_totals / sum(weights_totals)
     l$topos <- twisst_object$topos
     l
     }
