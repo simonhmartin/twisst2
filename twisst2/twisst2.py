@@ -432,7 +432,7 @@ def main():
         groups = [g.split(",") for g in args.groups]
     
     elif args.groups_file:
-        groups = [[]]*ngroups
+        groups = [[] for i in range(ngroups)]
         with open(args.groups_file, "rt") as gf: groupDict = dict([ln.split() for ln in gf.readlines()])
         for sample in groupDict.keys():
             try: groups[group_names.index(groupDict[sample])].append(sample)
@@ -501,7 +501,7 @@ def main():
         with gzip.open(args.out_prefix + "." + chrom + ".topocounts.tsv.gz", "wt") as outfile:
             topocounts_stacked.write(outfile)
         
-        with gzip.open(args.out_prefix + "." + chrom + ".windowdata.tsv.gz", "wt") as outfile:
+        with gzip.open(args.out_prefix + "." + chrom + ".intervals.tsv.gz", "wt") as outfile:
             topocounts_stacked.write_window_data(outfile)
     
     print(f"\nEnd of file reached. Looks like my work is done.", file=sys.stderr)
