@@ -192,17 +192,41 @@ class TopologySummary:
             self.chains[pair].setSet()
             self.chains[pair[::-1]] = self.chains[pair]
         
-        #add weight 1 for root
+        #add weight 1 for root (do this now only because we don't want to include the root in the leavesRetained set)
         self.leafWeights[tree.root] = 1
     
-    def get_topology_ID(self, leaves, unrooted=False):
+    #def get_topology_ID(self, leaves, unrooted=False):
+        #if leaves is None: leaves = sorted(self.leavesRetained)
+        #if not unrooted: leaves = list(leaves) + [self.root]
+        #n = len(leaves)
+        #return tuple([self.chains[(leaves[pairs[0][0]],
+                                   #leaves[pairs[0][1]],)]._set_.isdisjoint(self.chains[(leaves[pairs[1][0]],
+                                                                                        #leaves[pairs[1][1]],)]._set_)
+                                      #for pairs in pairPairs_generic[n]])
+    
+    def get_quartet_ID(self, quartet):
+        if self.chains[(quartet[0],quartet[1],)]._set_.isdisjoint(self.chains[(quartet[2],quartet[3],)]._set_):
+            return 0
+        elif self.chains[(quartet[0],quartet[2],)]._set_.isdisjoint(self.chains[(quartet[1],quartet[3],)]._set_):
+            return 1
+        elif  self.chains[(quartet[0],quartet[3],)]._set_.isdisjoint(self.chains[(quartet[1],quartet[2],)]._set_):
+            return 2
+        return 3
+    
+    #def get_all_quartet_IDs(self, leaves=None, unrooted=False):
+        #if leaves is None: leaves = sorted(self.leavesRetained)
+        #if not unrooted: leaves = list(leaves) + [self.root]
+        #return [self.get_quartet_ID(quartet) for quartet in itertools.combinations(leaves, 4)]
+    
+    def get_all_quartet_IDs(self, leaves=None, unrooted=False):
         if leaves is None: leaves = sorted(self.leavesRetained)
-        if not unrooted: leaves = list(leaves) + [self.root]
-        n = len(leaves)
-        return tuple([self.chains[(leaves[pairs[0][0]],
-                                   leaves[pairs[0][1]],)]._set_.isdisjoint(self.chains[(leaves[pairs[1][0]],
-                                                                                        leaves[pairs[1][1]],)]._set_)
-                                      for pairs in pairPairs_generic[n]])
+        if unrooted:
+            return [self.get_quartet_ID(quartet) for quartet in itertools.combinations(leaves, 4)]
+        else:
+            return [self.get_quartet_ID(trio + (self.root,)) for trio in itertools.combinations(leaves, 3)]
+    
+    def get_topology_ID(self, leaves=None, unrooted=False):
+        return tuple(self.get_all_quartet_IDs(leaves, unrooted))
     
     def get_topology_counts(self, groups, max_iterations, unrooted=False):
         _groups = [[leaf for leaf in group if leaf in self.leavesRetained] for group in groups]
@@ -219,3 +243,68 @@ class TopologySummary:
             counts[ID] += comboWeight
         
         return counts
+
+def get_quartet_dist(tree1, tree2, unrooted=False, approximation_subset_size=None):
+    topoSummary1 = TopologySummary(tree1)
+    topoSummary2 = TopologySummary(tree2)
+    
+    if approximation_subset_size is None:
+        quartetIDs1 = np.array(topoSummary1.get_all_quartet_IDs(unrooted=unrooted))
+        quartetIDs2 = np.array(topoSummary2.get_all_quartet_IDs(unrooted=unrooted))
+    else:
+        #do approximate distance with random sets of quartets
+        quartetIDs1 = np.zeros(approximation_subset_size, dtype=int)
+        quartetIDs2 = np.zeros(approximation_subset_size, dtype=int)
+        
+        for i in range(approximation_subset_size):
+            if unrooted:
+                quartet = random.sample(topoSummary1.leavesRetained, 4)
+                quartetIDs1[i] = topoSummary1.get_quartet_ID(quartet)
+                quartetIDs2[i] = topoSummary2.get_quartet_ID(quartet)
+            
+            else:
+                trio = random.sample(topoSummary1.leavesRetained, 3)
+                quartetIDs1[i] = topoSummary1.get_quartet_ID(trio + [tree1.root])
+                quartetIDs2[i] = topoSummary2.get_quartet_ID(trio + [tree2.root])
+    
+    dif = quartetIDs1 - quartetIDs2
+    return np.mean(dif != 0)
+
+
+def get_min_quartet_dist(tree1, tree2, inds, max_itr=10, unrooted=False):
+    topoSummary1 = TopologySummary(tree1)
+    topoSummary2 = TopologySummary(tree2)
+    
+    #quartet IDs for tree 1 are unchanging
+    quartetIDs1 = np.array(topoSummary1.get_all_quartet_IDs(unrooted=unrooted))
+    
+    #for tree 2 we try with different permutations for each individual
+    new_inds = inds[:]
+    
+    for itr in range(max_itr):
+        
+        for i in range(len(inds)):
+            
+            ind_orderings = list(itertools.permutations(inds[i]))
+            
+            dists = []
+            
+            for ind_ordering in ind_orderings:
+                current_inds = new_inds[:]
+                current_inds[i] = ind_ordering
+                quartetIDs2 = np.array(topoSummary2.get_all_quartet_IDs(leaves=[i for ind in current_inds for i in ind], unrooted=unrooted))
+                dif = quartetIDs1 - quartetIDs2
+                dists.append(np.mean(dif != 0))
+            
+            new_inds[i] = ind_orderings[np.argmin(dists)]
+        
+        if itr > 0 and new_inds == previous_new_inds: break
+        else:
+            previous_new_inds = new_inds[:]
+    
+    #get final dist
+    quartetIDs2 = np.array(topoSummary2.get_all_quartet_IDs(leaves=[i for ind in new_inds for i in ind], unrooted=unrooted))
+    dif = quartetIDs1 - quartetIDs2
+    
+    return np.mean(dif != 0)
+
