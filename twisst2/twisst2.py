@@ -113,9 +113,14 @@ def is_bifurcating(tree):
             return False
     return True
 
+def number_of_possible_trees(n_tips, include_ploytomies=False):
+    i = 0
+    for tree in tskit.all_trees(n_tips):
+        if include_ploytomies or is_bifurcating(tree): i += 1
+    return i
 
 def list_all_topologies_tskit(n, include_polytomies = False):
-    assert n <= 7, "There are 135135 rooted topologies with 8 tips (660032 including bifurcations). I doubt you want to list all of those."
+    assert n <= 7, "There are 135135 rooted topologies with 8 tips (660032 including polytomies). I doubt you want to list all of those."
     if include_polytomies: return list(tskit.all_trees(n))
     return [tree for tree in tskit.all_trees(n) if is_bifurcating(tree)]
 
@@ -198,7 +203,7 @@ class Topocounts:
         assert counts.shape[1] == len(topos)
         if intervals is not None:
             assert intervals.shape[1] == 2
-            assert counts.shape[0] == intervals.shape[0]
+            assert counts.shape[0] == intervals.shape[0], f"There are {counts.shape[0]} rows of counts but {intervals.shape[0]} intervals."
         self.topos = topos
         self.counts = counts
         if totals is not None:
@@ -218,9 +223,9 @@ class Topocounts:
         output_array = np.column_stack([self.counts, self.totals - self.counts.sum(axis=1)]).astype(str)
         outfile.write("\n".join(["\t".join(row) for row in output_array]) + "\n")
     
-    def write_window_data(self, outfile, include_header=True):
+    def write_intervals(self, outfile, chrom="chr1", include_header=True):
         if include_header: outfile.write("chrom\tstart\tend\n")
-        outfile.write("\n".join(["\t".join(["chr1", str(self.intervals[i,0]), str(self.intervals[i,1])]) for i in range(len(self.totals))]) + "\n")
+        outfile.write("\n".join(["\t".join([chrom, str(self.intervals[i,0]), str(self.intervals[i,1])]) for i in range(len(self.totals))]) + "\n")
 
 def stack_topocounts(topocounts_list):
     #get all unique intervals
@@ -288,7 +293,7 @@ def get_topocounts_tskit(ts, groups=None, group_names=None, topoDict=None, inclu
     return Topocounts(topos, counts, totals, intervals, label_dict)
 
 
-def get_topocounts(trees, n_trees, groups, max_iterations, simplify=True, group_names=None, topoDict=None, unrooted=False):
+def get_topocounts(trees, groups, max_iterations, simplify=True, group_names=None, topoDict=None, unrooted=False):
     
     ngroups = len(groups)
     label_dict = dict(zip(range(ngroups), group_names if group_names else ("group"+str(i) for i in range(1, ngroups+1))))
@@ -299,9 +304,9 @@ def get_topocounts(trees, n_trees, groups, max_iterations, simplify=True, group_
     topos = topoDict["topos"]
     topoIDs = topoDict["topoIDs"]
     
-    counts = np.zeros((n_trees, len(topoIDs)), dtype=int)
+    counts = []
     
-    totals = np.zeros(n_trees, dtype=int)
+    totals = []
     
     intervals = []
     
@@ -310,13 +315,11 @@ def get_topocounts(trees, n_trees, groups, max_iterations, simplify=True, group_
     for i,tree in enumerate(trees):
         topoSummary = TopologySummary(tree, leafGroupDict)
         counts_dict = topoSummary.get_topology_counts(groups, max_iterations, unrooted)
-        counts[i] = [counts_dict[ID] for ID in topoIDs]
-        totals[i] = sum(counts_dict.values())
+        counts.append([counts_dict[ID] for ID in topoIDs])
+        totals.append(sum(counts_dict.values()))
         intervals.append(tree.interval)
     
-    intervals = np.array(intervals, dtype=float)
-    
-    return Topocounts(topos, counts, totals, intervals, label_dict)
+    return Topocounts(topos, np.array(counts, dtype=int), np.array(totals, dtype=int), np.array(intervals, dtype=float), label_dict)
 
 
 def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_iterations, group_names=None,
@@ -360,7 +363,7 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
         
         print(f"\nCounting topologies for iteration {iteration}.", file=sys.stderr, flush=True)
         
-        topocounts_iterations.append(get_topocounts(trees, len(clusters), groups = make_numeric_groups(ploidies_sub),
+        topocounts_iterations.append(get_topocounts(trees, groups = make_numeric_groups(ploidies_sub),
                                                     group_names=group_names, max_iterations=1024, unrooted=unrooted))
     
     print(f"\nStacking", file=sys.stderr)
@@ -502,7 +505,7 @@ def main():
             topocounts_stacked.write(outfile)
         
         with gzip.open(args.out_prefix + "." + chrom + ".intervals.tsv.gz", "wt") as outfile:
-            topocounts_stacked.write_window_data(outfile)
+            topocounts_stacked.write_intervals(outfile, chrom=chrom)
     
     print(f"\nEnd of file reached. Looks like my work is done.", file=sys.stderr)
 
