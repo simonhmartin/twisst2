@@ -39,7 +39,7 @@ If the vcf file already has the ancestral allele (provided in the `AA` field in 
 Now you can run the `twisst2` to count sub-tree topologies:
 
 ```bash
-twisst2 -i <input_vcf> -o <output_prefix> --max_iterations 100 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+twisst2 -i <input_vcf> -o <output_prefix> --max_subtrees 320 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
 ```
 
 ### Output
