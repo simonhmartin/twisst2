@@ -179,7 +179,7 @@ import.twisst <- function(topocounts_files, intervals_files=NULL, split_by_chrom
     else{
         #otherwise we try to retrieve topologies from the (first) topocounts file
         n_topos = ncol(l$topocounts[[1]]) - 1
-        topos_text <- read.table(topocounts_file, nrow=n_topos, comment.char="", sep="\t", as.is=T)[,1]
+        topos_text <- read.table(topocounts_files[1], nrow=n_topos, comment.char="", sep="\t", as.is=T)[,1]
         try(l$topos <- read.tree(text = topos_text))
         try(names(l$topos) <- sapply(names(l$topos), substring, 2))
         }
@@ -287,9 +287,9 @@ hex.transparency <- function(hex, transstring="88"){
     }
 
 
-plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions=NULL, ncol_weights=1,
-                        cols=topo_cols, tree_type="clad", tree_x_lim=c(0,5), xlim=NULL, ylim=NULL, xlab=NULL, mode=2, rel_height=3,
-                        margins = c(4,4,2,2), concatenate=FALSE, gap=0, include_region_names=FALSE){
+plot.twisst <- function(twisst_object, show_topos=TRUE, rel_height=3, ncol_topos=NULL, regions=NULL, ncol_weights=1,
+                        cols=topo_cols, tree_type="clad", tree_x_lim=c(0,5), xlim=NULL, ylim=NULL, xlab=NULL, xaxt=NULL,
+                        mode=2, margins = c(4,4,2,2), concatenate=FALSE, gap=0, include_region_names=FALSE){
     
     #check if there are enough colours
     if (length(twisst_object$topos) > length(cols)){
@@ -297,22 +297,41 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         cols = rainbow(length(twisst_object$topos))
         }
     
-    if (mode==3) {
+    if (mode==5) {
         stacked=TRUE
+        weights_order=1:length(twisst_object$topos)
         fill_cols = cols
         line_cols = NA
         lwd = 0
         }
     
-    if (mode==2) {
+    if (mode==4) {
         stacked=FALSE
+        weights_order=order(apply(twisst_data$weights_mean, 2, mean, na.rm=T)[1:length(twisst_object$topos)], decreasing=T) #so that the largest values are at the back
+        fill_cols = cols
+        line_cols = NA
+        lwd=par("lwd")
+        }
+    
+    if (mode==3) {
+        stacked=FALSE
+        weights_order=order(apply(twisst_data$weights_mean, 2, mean, na.rm=T)[1:length(twisst_object$topos)], decreasing=T) #so that the largest values are at the back
         fill_cols = sapply(cols, hex.transparency, transstring="80")
         line_cols = cols
         lwd=par("lwd")
         }
     
+    if (mode==2) {
+        stacked=FALSE
+        weights_order=order(apply(twisst_data$weights_mean, 2, mean, na.rm=T)[1:length(twisst_object$topos)], decreasing=T) #so that the largest values are at the back
+        fill_cols = sapply(cols, hex.transparency, transstring="80")
+        line_cols = NA
+        lwd=par("lwd")
+        }
+    
     if (mode==1) {
         stacked=FALSE
+        weights_order=1:length(twisst_object$topos)
         fill_cols = NA
         line_cols = cols
         lwd=par("lwd")
@@ -353,7 +372,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
     
     if (show_topos == TRUE){
         if (tree_type=="unrooted"){
-            par(mar=c(2,2,2,2), xpd=NA)
+            par(mar=c(1,2,3,2), xpd=NA)
             
             for (i in 1:n_topos){
                 plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
@@ -367,7 +386,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
             for (i in 1:n_topos){
                 plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
                         edge.width=5, label.offset=0.3, cex=1, rotate.tree = 0, x.lim=tree_x_lim)
-                mtext(side=3,text=paste0("topo",i), cex=0.75)
+                mtext(side=3,text=paste0("topo",i,"   "), cex=0.75)
                 }
             }
         }
@@ -386,17 +405,17 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         for (j in regions) {
             if (is.null(twisst_object$interval_data[[j]])) positions <- twisst_object$pos[[j]] + chrom_offsets[j]
             else positions <- twisst_object$interval_data[[j]][,c("start","end")] + chrom_offsets[j]
-            plot.weights(twisst_object$weights[[j]][1:length(twisst_object$topos)], positions, xlim=xlim,
-                         fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked, add=T)
+            plot.weights(twisst_object$weights[[j]][weights_order], positions, xlim=xlim,
+                         fill_cols = fill_cols[weights_order], line_cols=line_cols[weights_order],lwd=lwd,stacked=stacked, add=T)
             }
         }
     else{
         for (j in regions){
             if (is.null(twisst_object$interval_data[[j]])) positions <- twisst_object$pos[[j]]
             else positions <- twisst_object$interval_data[[j]][,c("start","end")]
-            plot.weights(twisst_object$weights[[j]][1:length(twisst_object$topos)], positions, xlim=xlim, ylim = ylim,
-                         xlab=xlab, fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked,
-                         main = ifelse(include_region_names==TRUE, names(twisst_object$weights)[j], ""))
+            plot.weights(twisst_object$weights[[j]][weights_order], positions, xlim=xlim, ylim = ylim,
+                         xlab=xlab, fill_cols = fill_cols[weights_order], line_cols=line_cols[weights_order],lwd=lwd,stacked=stacked, xaxt=xaxt)
+            if (include_region_names==TRUE) mtext(3, text=names(twisst_object$weights)[j], adj=0, cex=0.75)
             }
         }
     }
@@ -491,12 +510,10 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=
 
 
 #code for plotting a summary boxplot
-plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, only_best=NULL, cols=topo_cols,
+plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, only_best=NULL, trees_below=FALSE, cols=topo_cols,
                                 x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
                                 label_offset = 0.05, lwd=NULL, label_alias=NULL, cex=NULL, outline=FALSE,
                                 cex.outline=NULL, lwd.box=NULL, topo_names=NULL){
-    
-    library(data.table)
     
     #check if there are enough colours
     if (length(twisst_object$topos) > length(cols)){
@@ -515,13 +532,15 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
     N=length(ord)
     
     #set the plot layout, with the tree panel one third the height of the barplot panel
-    layout(matrix(c(2,1)), heights=c(1,3))
+    if (trees_below==FALSE) layout(matrix(c(2,1)), heights=c(1,3))
+    else layout(matrix(c(1,2)), heights=c(3,1))
     
-    par(mar = c(1,4,.5,1))
+    
+    par(mar = c(1,4,.5,1), bty="n")
     
     #make the barplot
     boxplot(as.data.frame(rbindlist(twisst_object$weights))[,ord], col = cols[ord],
-            xaxt="n", las=1, xlim = c(.5, N+.5), ylab="Average weighting", outline=outline, cex=cex.outline, lwd=lwd.box)
+            xaxt="n", las=1, xlim = c(.5, N+.5), ylab="Weighting", outline=outline, cex=cex.outline, lwd=lwd.box)
     
     #draw the trees
     #first make an empty plot for the trees. Ensure left and right marhins are the same
@@ -537,7 +556,7 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
     if (is.null(topo_names)==TRUE) topo_names <- names(twisst_object$topos)
     
     #add labels for each topology
-    text(1:N,.9,topo_names[ord],col=cols[ord])
+    text(1:N,.9,topo_names[ord],col=cols[ord], cex=cex)
     }
 
 #function for subsetting the twisst object by a set of topologies
@@ -572,3 +591,194 @@ subset.twisst.by.regions <- function(twisst_object, regions){
     l$topos <- twisst_object$topos
     l
     }
+
+rbindlist <- function(l){
+    df <- l[[1]]
+    if (length(l) > 1){
+        for (i in 2:length(l)){
+            df <- rbind(df, l[[i]])
+            }
+        }
+    df
+    }
+
+
+palettes = list(
+soft = c(
+"#0178a9",
+"#a9b240",
+"#5db54c",
+"#b8903f",
+"#5c7c36",
+"#855dce",
+"#be53a6",
+"#4870d4",
+"#757eca",
+"#e9007f",
+"#5fb1e6",
+"#ff697e",
+"#f5adfe",
+"#922e47",
+"#e297a7"),
+
+jewel = c(
+"#6e7200",
+"#a51ba7",
+"#5bdf7d",
+"#de0050",
+"#01d4c1",
+"#dd3922",
+"#89a8ff",
+"#639e00",
+"#ff68ae",
+"#3d683f",
+"#ff7d30",
+"#085593",
+"#ffb954",
+"#833475",
+"#91332b"),
+
+paints =c(
+"#7148c0",
+"#cf4859",
+"#69bbb5",
+"#bf763d",
+"#009466",
+"#666ba9",
+"#ff0f37",
+"#8e4b5b",
+"#32c515",
+"#752824",
+"#e877ff",
+"#37400d",
+"#bdbb49",
+"#82c277",
+"#4f7f00"),
+
+sashamaps = c(
+'#4363d8', #chalk blue
+'#3cb44b', #grass green
+'#ffe119', #custard yellow
+'#e6194b', #pomergranate red
+'#f58231', #chalk orange
+'#911eb4', #violet
+'#46f0f0', #cyan
+'#f032e6', #hot pink
+'#000075', #navy blue
+'#fabebe', #pale blush
+'#008080', #teal
+'#e6beff', #mauve
+'#9a6324', #coconut bown
+'#800000', #red leather
+'#aaffc3', #light sage
+'#808000', #khaki
+'#ffd8b1', #white skin
+'#bcf60c', #green banana
+'#808080', #grey
+'#fffac8'), #beach sand
+
+alphabet = c(
+"#0075DC", #Blue
+"#FFA405", #Orpiment
+"#2BCE48", #Green
+"#003380", #Navy
+"#F0A3FF", #Amethyst
+"#990000", #Wine
+"#9DCC00", #Lime
+"#8F7C00", #Khaki
+"#FFE100", #Yellow
+"#C20088", #Mallow
+"#FFCC99", #Honeydew
+"#5EF1F2", #Sky
+"#00998F", #Turquoise
+"#FF5005", #Zinnia
+"#4C005C", #Damson
+"#426600", #Quagmire
+"#005C31", #Forest
+"#FFA8BB", #Pink
+"#740AFF", #Violet
+"#E0FF66", #Uranium
+"#993F00", #Caramel
+"#94FFB5", #Jade
+"#FFFF80", #Xanthin
+"#FF0010", #Red
+"#191919", #Ebony
+"#808080"), #Iron
+
+
+krzywinski = c(
+"#490092",
+"#009292",
+"#ff6db6",
+"#ffb6db",
+"#004949",
+"#006ddb",
+"#b66dff",
+"#6db6ff",
+"#b6dbff",
+"#920000",
+"#924900",
+"#db6d00",
+"#24ff24",
+"#ffff6d",
+"#000000"),
+
+safe = c( #from cartomap package
+"#88CCEE",
+"#CC6677",
+"#DDCC77",
+"#117733",
+"#332288",
+"#AA4499",
+"#44AA99",
+"#999933",
+"#882255",
+"#661100",
+"#6699CC",
+"#888888"),
+
+cud = c(
+"#E69F00",
+"#56B4E9",
+"#009E73",
+"#F0E442",
+"#0072B2",
+"#D55E00",
+"#CC79A7",
+"#000000",
+"#999999",
+"#F0F0F0",
+"#FF6666",
+"#00FF00",
+"#0000FF",
+"#800080",
+"#FFFF00"),
+
+set3ext = c(
+"#8DD3C7",
+"#FFFFB3",
+"#B3B3CC",
+"#FFCC99",
+"#B3E2CD",
+"#FBB4AE",
+"#CC99FF",
+"#FFB3E6",
+"#FF6666",
+"#D9D9D9",
+"#E6AB02",
+"#FF8C00",
+"#8B008B",
+"#6A5ACD",
+"#3CB371"))
+
+show_palettes <- function(){
+    par(mfrow = c(length(palettes), 1), mar = c(2,0,2,0))
+
+    for (name in names(palettes)){
+        n = length(palettes[[name]])
+        plot(0, cex=0, xlim = c(1,n+1), ylim = c(0,1), xaxt="n", yaxt="n", bty="n", main=name)
+        rect(1:n, 0, 2:(n+1), 1, col=palettes[[name]])
+        axis(1, at=(1:n)+0.5, labels = palettes[[name]], tick=F)
+        }
+    }
+
