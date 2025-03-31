@@ -14,14 +14,31 @@ try: import tskit
 except ImportError:
     pass
 
-def comboGen(groups, max_iterations):
-    n_combos = np.prod([len(t) for t in groups])
-    if n_combos <= max_iterations:
+def get_combos(groups, max_subtrees, ploidies):
+    total_subtrees = np.prod([ploidies[group].sum() for group in groups])
+    if total_subtrees <= max_subtrees:
         for combo in itertools.product(*groups):
             yield combo
     else:
-        for i in range(max_iterations):
-            yield tuple(random.choice(group) for group in groups)
+        #doing only a subset, so need to keep track of how many subtrees have been done
+        subtrees_done = 0
+        while True:
+            combo = [random.choice(group) for group in groups]
+            yield tuple(combo)
+            subtrees_done += np.prod(ploidies[combo])
+            if subtrees_done >= max_subtrees: break
+
+
+    ##older code when we were specifiying number of combinations (which results in different total subtrees depending on ploidy)
+    #else:
+        #assert max_combos, "Please specify either maximum number of combos or subtrees"
+        #total_combos = np.prod([len(t) for t in groups])
+        #if total_combos <= max_combos:
+            #for combo in itertools.product(*groups):
+                #yield combo
+        #else:
+            #for i in range(max_combos):
+                #yield tuple(random.choice(group) for group in groups)
 
 
 def contains_interval(intervals, interval):
@@ -77,32 +94,6 @@ def get_unique_intervals(intervals, verbose=True):
     output = [interval for interval in output if np.any(contains_interval(intervals, interval))]
     
     return np.array(output)
-
-
-#def split_weights(weights, intervals, new_intervals):
-    
-    #n_new_intervals = len(new_intervals)
-    
-    #n_topos = weights["weights"].shape[1]
-    
-    #_weights_ = np.zeros((n_new_intervals, n_topos), dtype=int)
-    
-    #k=0
-    #max_k = len(intervals)
-    #for j in range(n_new_intervals):
-        #if intervals[k][0] <= new_intervals[j][0] and intervals[k][1] >= new_intervals[j][1]:
-            ##k contains j
-            #_weights_[j,:] += weights["weights"][k]
-        
-        #if intervals[k][1] == new_intervals[j][1]:
-            ##both are ending, so advance k
-            #k += 1
-            #if k == max_k: break
-    
-    #weights_split = {"topos": weights["topos"], "weights": _weights_, "weights_norm":np.apply_along_axis(lambda x: x/x.sum(), 1, _weights_)}
-    
-    #return weights_split
-
 
 
 def show_tskit_tree(tree, node_labels=None): print(tree.draw(format="unicode", node_labels=node_labels))
@@ -199,7 +190,7 @@ def make_topoDict_tskit(n, include_polytomies=False):
 
 
 class Topocounts:
-    def __init__(self, topos, counts, totals=None, intervals=None, label_dict=None):
+    def __init__(self, topos, counts, totals=None, intervals=None, label_dict=None, rooted=None):
         assert counts.shape[1] == len(topos)
         if intervals is not None:
             assert intervals.shape[1] == 2
@@ -207,11 +198,126 @@ class Topocounts:
         self.topos = topos
         self.counts = counts
         if totals is not None:
-            assert np.all(totals >= self.counts.sum(axis=1))
+            assert np.all(totals >= self.counts.sum(axis=1).round(3))
             self.totals = totals
         else: self.totals = counts.sum(axis=1)
         self.intervals = intervals
         self.label_dict = label_dict
+        self.rooted = rooted
+    
+    def unroot(self):
+        #returns a Topocounts instance reduced to unrooted version of each topology
+        topoSummaries = [TopologySummary(topo) for topo in self.topos]
+        
+        topoIDs_unrooted = [topoSummary.get_topology_ID(unrooted=True) for topoSummary in topoSummaries]
+        
+        indices = defaultdict(list)
+        for i,ID in enumerate(topoIDs_unrooted): indices[ID].append(i)
+        
+        counts_unrooted = np.column_stack([self.counts[:,idx].sum(axis=1) for idx in indices.values()])
+        
+        new_topos = [self.topos[idx[0]] for idx in indices.values()]
+        
+        return Topocounts(new_topos, counts_unrooted, totals=self.totals, intervals=self.intervals, label_dict=self.label_dict, rooted=False)
+    
+    def simplify(self):
+        new_counts_list = [self.counts[0]]
+        new_intervals_list = [self.intervals[0][:]]
+        new_totals_list = [self.totals[0]]
+        
+        for j in range(1, self.intervals.shape[0]):
+            
+            if np.all(new_counts_list[-1] == self.counts[j]):
+                new_intervals_list[-1][1] = self.intervals[j][-1]
+            else:
+                new_intervals_list.append(self.intervals[j][:])
+                new_counts_list.append(self.counts[j])
+                new_totals_list.append(self.totals[j])
+        
+        return Topocounts(self.topos, np.array(new_counts_list, dtype=int),
+                          totals=np.array(new_totals_list, dtype=int),
+                          intervals=np.array(new_intervals_list), label_dict=self.label_dict, rooted=self.rooted)
+    
+    
+    def split_intervals(self, split_len=None, new_intervals=None):
+        #function to split topocounts into a narrower set of intervals
+        #if new intervals are given, it will be split at those points and return any splits between those points
+        
+        if split_len != None:
+            new_intervals = np.array([(x, x+split_len-1) for x in range(1, int(self.intervals[-1][1]), split_len)])
+        else: assert new_intervals is not None, "Either provide a split length or new intervals to define the split locations"
+        
+        unique_intervals = get_unique_intervals(np.row_stack([self.intervals, new_intervals]))
+        
+        n_unique_intervals = len(unique_intervals)
+        
+        _counts_ = np.zeros((n_unique_intervals, self.counts.shape[1]), dtype=int)
+        _totals_ = np.zeros(n_unique_intervals, dtype=int)
+        
+        #for each iteration we check each of its intervals
+        k=0
+        max_k = self.intervals.shape[0]
+        for j in range(n_unique_intervals):
+            #for each of the unique intervals - if nested within the one of the starting intervals add it
+            if self.intervals[k,0] <= unique_intervals[j,0] and self.intervals[k,1] >= unique_intervals[j,1]:
+                #k contains j
+                _counts_[j,:] = self.counts[k]
+                _totals_[j] = self.totals[k]
+            
+            if self.intervals[k,1] == unique_intervals[j,1]:
+                #both are ending, so advance k to the next interval in this iteration
+                k += 1
+                if k == max_k: break
+        
+        return Topocounts(self.topos, _counts_, _totals_, unique_intervals, self.label_dict)
+    
+    
+    def transfer_intervals(self, interval_len=None, new_intervals=None):
+        #function to transfer topocounts to a new set of intervals
+        #only possible if the totals are the same for all intervals (i.e. no subssampling of combinations)
+        #if you just want to split to smaller intervals use split_intervals
+        #the resulting counts will be floats because they represent a weighted average
+        
+        assert len(set(self.totals)) == 1, "Cannot merge intervals with different total number of combinations."
+        
+        if interval_len != None:
+            new_intervals = np.array([(x, x+interval_len-1) for x in range(1, int(self.intervals[-1][1]), interval_len)])
+        else: assert new_intervals is not None, "Either provide a split length or new intervals to define the split locations"
+        
+        n_new_intervals = len(new_intervals)
+        
+        #first make a split set of topocounts
+        topocounts_split = self.split_intervals(new_intervals=new_intervals)
+        
+        _totals_ = np.array([self.totals[0]]*n_new_intervals)
+        
+        #now begin merging
+        _counts_ = np.zeros((n_new_intervals, self.counts.shape[1]), dtype=float)
+        
+        k=0
+        max_k = n_new_intervals
+        current_indices = []
+        for j in range(topocounts_split.intervals.shape[0]):
+            #for each of the unique intervals - if nested within the new interval add the count to a bin
+            if new_intervals[k,0] <= topocounts_split.intervals[j,0] and topocounts_split.intervals[j,1] <= new_intervals[k,1]:
+                current_indices.append(j)
+            
+            if topocounts_split.intervals[j,1] == new_intervals[k,1]:
+                #end of new interval record mean
+                interval_lengths = np.diff(topocounts_split.intervals[current_indices], axis=1)[:,0] + 1 # weights will be the lengths
+                _counts_[k] = np.average(topocounts_split.counts[current_indices], axis=0, weights=interval_lengths)
+                current_indices = []
+                k += 1
+                if k == max_k: break
+        
+        return Topocounts(self.topos, _counts_, _totals_, new_intervals, self.label_dict)
+    
+    
+    def get_interval_lengths(self):
+        return np.diff(self.intervals, axis=1)[:,0] + 1
+    
+    def get_weights(self):
+        return self.counts / self.totals.reshape((len(self.totals),1))
     
     def write(self, outfile, include_topologies=True, include_header=True):
         nTopos = len(self.topos)
@@ -227,7 +333,7 @@ class Topocounts:
         if include_header: outfile.write("chrom\tstart\tend\n")
         outfile.write("\n".join(["\t".join([chrom, str(self.intervals[i,0]), str(self.intervals[i,1])]) for i in range(len(self.totals))]) + "\n")
 
-def stack_topocounts(topocounts_list):
+def stack_topocounts(topocounts_list, silent=False):
     #get all unique intervals
     unique_intervals = get_unique_intervals(np.row_stack([tc.intervals for tc in topocounts_list]))
     
@@ -238,7 +344,7 @@ def stack_topocounts(topocounts_list):
     
     #for each iteration we check each of its intervals
     for i in range(len(topocounts_list)):
-        print(".", end="", file=sys.stderr, flush=True)
+        if not silent: print(".", end="", file=sys.stderr, flush=True)
         k=0
         intervals = topocounts_list[i].intervals
         max_k = intervals.shape[0]
@@ -254,18 +360,20 @@ def stack_topocounts(topocounts_list):
                 k += 1
                 if k == max_k: break
     
+    if not silent: print("\n", file=sys.stderr, flush=True)
+    
     return Topocounts(topocounts_list[0].topos, _counts_, _totals_, unique_intervals, topocounts_list[i].label_dict)
 
 
-def get_topocounts_tskit(ts, groups=None, group_names=None, topoDict=None, include_polytomies=False):
+def get_topocounts_tskit(ts, leaf_groups=None, group_names=None, topoDict=None, include_polytomies=False):
     
-    if groups is None:
+    if leaf_groups is None:
         #use populations from ts
         assert list(ts.populations()) != [], "Either specify groups or provide a treesequence with embedded population data."
         if group_names is None: group_names = [str(pop.id) for pop in ts.populations()]
-        groups = [[s for s in ts.samples() if str(ts.get_population(s)) == t] for t in taxonNames]
+        leaf_groups = [[s for s in ts.samples() if str(ts.get_population(s)) == t] for t in taxonNames]
     
-    ngroups = len(groups)
+    ngroups = len(leaf_groups)
     label_dict = dict(zip(range(ngroups), group_names if group_names else ("group"+str(i) for i in range(1, ngroups+1))))
     
     if not topoDict:
@@ -282,9 +390,10 @@ def get_topocounts_tskit(ts, groups=None, group_names=None, topoDict=None, inclu
     
     totals = np.zeros(ts.num_trees, dtype=int)
     
-    counter_generator = ts.count_topologies(groups)
+    counter_generator = ts.count_topologies(leaf_groups)
+    #counter_generator = tskit.combinatorics.treeseq_count_topologies(ts, leaf_groups) #this seems no faster when tested Jan 2025
     
-    key = tuple(range(ngroups)) #we only want to count subtree topologies with a tip for each of the groups
+    key = tuple(range(ngroups)) #we only want to count subtree topologies with a tip for each of the leaf_groups
     
     for i, counter in enumerate(counter_generator):
         counts[i] = [counter[key][rank] for rank in ranks]
@@ -293,9 +402,9 @@ def get_topocounts_tskit(ts, groups=None, group_names=None, topoDict=None, inclu
     return Topocounts(topos, counts, totals, intervals, label_dict)
 
 
-def get_topocounts(trees, groups, max_iterations, simplify=True, group_names=None, topoDict=None, unrooted=False):
+def get_topocounts(trees, leaf_groups, max_subtrees, simplify=True, group_names=None, topoDict=None, unrooted=False):
     
-    ngroups = len(groups)
+    ngroups = len(leaf_groups)
     label_dict = dict(zip(range(ngroups), group_names if group_names else ("group"+str(i) for i in range(1, ngroups+1))))
     
     if not topoDict:
@@ -310,11 +419,11 @@ def get_topocounts(trees, groups, max_iterations, simplify=True, group_names=Non
     
     intervals = []
     
-    leafGroupDict = makeGroupDict(groups) if simplify else None
+    leafGroupDict = makeGroupDict(leaf_groups) if simplify else None
     
     for i,tree in enumerate(trees):
         topoSummary = TopologySummary(tree, leafGroupDict)
-        counts_dict = topoSummary.get_topology_counts(groups, max_iterations, unrooted)
+        counts_dict = topoSummary.get_topology_counts(leaf_groups, max_subtrees=max_subtrees, unrooted=unrooted)
         counts.append([counts_dict[ID] for ID in topoIDs])
         totals.append(sum(counts_dict.values()))
         intervals.append(tree.interval)
@@ -322,19 +431,19 @@ def get_topocounts(trees, groups, max_iterations, simplify=True, group_names=Non
     return Topocounts(topos, np.array(counts, dtype=int), np.array(totals, dtype=int), np.array(intervals, dtype=float), label_dict)
 
 
-def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_iterations, group_names=None,
+def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_subtrees, group_names=None,
                                    unrooted=False, second_chances=False, multi_pass=True, chrom_start=None, chrom_len=None, silent=True):
     
-    comboGenerator = comboGen(groups, max_iterations = max_iterations)
+    comboGenerator = get_combos(groups, max_subtrees = max_subtrees, ploidies=ploidies)
     
     topocounts_iterations = []
     
     for iteration,combo in enumerate(comboGenerator):
         
         if not silent:
-            print(f"\nIteration {iteration} sample indices: {', '.join([str(idx) for idx in combo])}")
-        
-        print(f"\nInferring treesequence for iteration {iteration}.", file=sys.stderr, flush=True)
+            print(f"\nSample combo {iteration+1} indices: {', '.join([str(idx) for idx in combo])}", file=sys.stderr, flush=True)
+            print(f"\nSample combo {iteration+1} will contribute {np.prod(ploidies[list(combo)])} subtree(s)", file=sys.stderr, flush=True)
+            print(f"\nInferring tree sequence for combo {iteration+1}.", file=sys.stderr, flush=True)
         
         der_counts_sub = der_counts[:, combo]
         
@@ -357,35 +466,23 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
         patterns, matches, n_matches  = sticcs.get_patterns_and_matches(der_counts_sub)
         
         clusters = sticcs.get_clusters(patterns, matches, positions_sub, ploidies=ploidies_sub, second_chances=second_chances,
-                                       seq_start=chrom_start, seq_len=chrom_len, silent=silent)
+                                       seq_start=chrom_start, seq_len=chrom_len, silent=True)
         
-        trees = sticcs.infer_trees(patterns, ploidies_sub, clusters, multi_pass = multi_pass, silent=silent)
+        trees = sticcs.infer_trees(patterns, ploidies_sub, clusters, multi_pass = multi_pass, silent=True)
         
-        print(f"\nCounting topologies for iteration {iteration}.", file=sys.stderr, flush=True)
+        if not silent:
+            print(f"\nCounting topologies for combo {iteration+1}.", file=sys.stderr, flush=True)
         
-        topocounts_iterations.append(get_topocounts(trees, groups = make_numeric_groups(ploidies_sub),
-                                                    group_names=group_names, max_iterations=1024, unrooted=unrooted))
+        topocounts = get_topocounts(trees, leaf_groups = make_numeric_groups(ploidies_sub),
+                                    group_names=group_names, max_subtrees=max_subtrees, unrooted=unrooted) #here we specify max subtrees, but really each combination will usually have a much smaller number of subtrees than the overall max requested
+        
+        topocounts_iterations.append(topocounts.simplify())
     
-    print(f"\nStacking", file=sys.stderr)
+    if not silent:
+        print(f"\nStacking", file=sys.stderr)
     
-    return stack_topocounts(topocounts_iterations)
+    return stack_topocounts(topocounts_iterations, silent=silent)
 
-#def merge_identical_weights
-
-    ##print("\nMerging adjacent identical intervals\n", file=sys.stderr)
-    ##unique_intervals_merged = [unique_intervals[0][:]]
-    ##stacks_merged = [stacks[0]]
-    ##onePercent = int(np.ceil(n_unique_intervals/100))
-    
-    ##for j in range(1, n_unique_intervals):
-        
-        ##if j % onePercent == 0: print(".", end="", file=sys.stderr, flush=True)
-        
-        ##if np.all(stacks_merged[-1] == stacks[j]):
-            ##unique_intervals_merged[-1][1] = unique_intervals[j][-1]
-        ##else:
-            ##unique_intervals_merged.append(unique_intervals[j][:])
-            ##stacks_merged.append(stacks[j])
 
 def makeGroupDict(groups, names=None):
     groupDict = {}
@@ -410,7 +507,7 @@ def main():
     parser.add_argument("--ploidy", help="Sample ploidy if all the same. Use --ploidy_file if samples differ.", action = "store", type=int)
     parser.add_argument("--ploidy_file", help="File with samples names and ploidy as columns", action = "store")
     
-    parser.add_argument("--max_iterations", help="Maximum iterations over combintions of individuals", action = "store", type=int, required=True)
+    parser.add_argument("--max_subtrees", help="Maximum number of subtrees to consider (note that each combination of diploids represents multiple subtrees)", action = "store", type=int, required=True)
     
     parser.add_argument("--allow_second_chances", help="Consider SNPs that are separated by incompatible SNPs", action='store_true')
     parser.add_argument("--single_pass", help="Single pass when building trees (only relevant for ploidy > 1, but not recommended)", action='store_true')
@@ -420,6 +517,7 @@ def main():
     parser.add_argument("--group_names", help="Name for each group (separated by spaces)", action='store', nargs="+", required = True)
     parser.add_argument("--groups", help="Sample IDs for each individual (separated by commas), for each group (separated by spaces)", action='store', nargs="+")
     parser.add_argument("--groups_file", help="Optional file with a column for sample ID and group", action = "store", required = False)
+    parser.add_argument("--variant_range_only", help="Verbose output", action="store_true")
     parser.add_argument("--verbose", help="Verbose output", action="store_true")
     
     args = parser.parse_args()
@@ -487,16 +585,23 @@ def main():
         
         assert positions.max() <= chromLenDict[chrom], f"\tSNP at position {positions.max()} exceeds chromosome length {chromLenDict[chrom]} for {chrom}."
         
+        if args.variant_range_only:
+            chrom_start = positions[0]
+            chrom_len = positions[-1]
+        else:
+            chrom_start = 1
+            chrom_len = chromLenDict[chrom]
+        
         print(f"\nAnalysing {chrom}. {positions.shape[0]} usable SNPs found.", file=sys.stderr)
         
         #correct sample order so that groups are together
         der_counts = der_counts[:,sample_indices]
         
         topocounts_stacked = get_topocounts_stacking_sticcs(der_counts, positions, ploidies=ploidies, groups=groups_numeric,
-                                                            group_names=group_names, max_iterations=args.max_iterations,
+                                                            group_names=group_names, max_subtrees=args.max_subtrees,
                                                             unrooted=args.unrooted, multi_pass=not args.single_pass,
                                                             second_chances = args.allow_second_chances,
-                                                            chrom_start=1, chrom_len=chromLenDict[chrom],
+                                                            chrom_start=chrom_start, chrom_len=chrom_len,
                                                             silent= not args.verbose)
         
         #could potnentially add step merging identical intervals here

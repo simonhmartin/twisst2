@@ -140,13 +140,13 @@ def getChainsToLeaves(tree, node=None, simplifyDict = None):
     return chains
 
 
-def comboGen(groups, max_iterations):
-    n_combos = np.prod([len(t) for t in groups])
-    if n_combos <= max_iterations:
-        for combo in itertools.product(*groups):
+def get_leaf_combos(leaf_groups, max_subtrees):
+    total = np.prod([len(t) for t in leaf_groups])
+    if total <= max_subtrees:
+        for combo in itertools.product(*leaf_groups):
             yield combo
     else:
-        for i in range(max_iterations):
+        for i in range(max_subtrees):
             yield tuple(random.choice(group) for group in groups)
 
 def pairsDisjoint(pairOfPairs):
@@ -228,16 +228,16 @@ class TopologySummary:
     def get_topology_ID(self, leaves=None, unrooted=False):
         return tuple(self.get_all_quartet_IDs(leaves, unrooted))
     
-    def get_topology_counts(self, groups, max_iterations, unrooted=False):
-        _groups = [[leaf for leaf in group if leaf in self.leavesRetained] for group in groups]
+    def get_topology_counts(self, leaf_groups, max_subtrees, unrooted=False):
+        _leaf_groups = [[leaf for leaf in group if leaf in self.leavesRetained] for group in leaf_groups]
         
         if self.simplifyDict is not None:
-            nCombos = np.prod([len(g) for g in _groups])
-            assert nCombos < max_iterations, "Tree simplification must be turned off when considering only a subset of combinations."
+            total = np.prod([len(g) for g in _leaf_groups])
+            assert total < max_subtrees, f"With groups {_leaf_groups}, there will be {total} subtrees, but you have requested only {max_subtrees}, you you need to turn off tree simplification or increase max_subtrees."
         
-        combos = comboGen(_groups, max_iterations)
+        leaf_combos = get_leaf_combos(_leaf_groups, max_subtrees)
         counts = defaultdict(int)
-        for combo in combos:
+        for combo in leaf_combos:
             comboWeight = np.prod([self.leafWeights[leaf] for leaf in combo])
             ID = self.get_topology_ID(combo, unrooted)
             counts[ID] += comboWeight
@@ -247,6 +247,7 @@ class TopologySummary:
 def get_quartet_dist(tree1, tree2, unrooted=False, approximation_subset_size=None):
     topoSummary1 = TopologySummary(tree1)
     topoSummary2 = TopologySummary(tree2)
+    leaves = list(topoSummary1.leavesRetained)
     
     if approximation_subset_size is None:
         quartetIDs1 = np.array(topoSummary1.get_all_quartet_IDs(unrooted=unrooted))
@@ -258,12 +259,12 @@ def get_quartet_dist(tree1, tree2, unrooted=False, approximation_subset_size=Non
         
         for i in range(approximation_subset_size):
             if unrooted:
-                quartet = random.sample(topoSummary1.leavesRetained, 4)
+                quartet = random.sample(leaves, 4)
                 quartetIDs1[i] = topoSummary1.get_quartet_ID(quartet)
                 quartetIDs2[i] = topoSummary2.get_quartet_ID(quartet)
             
             else:
-                trio = random.sample(topoSummary1.leavesRetained, 3)
+                trio = random.sample(leaves, 3)
                 quartetIDs1[i] = topoSummary1.get_quartet_ID(trio + [tree1.root])
                 quartetIDs2[i] = topoSummary2.get_quartet_ID(trio + [tree2.root])
     
