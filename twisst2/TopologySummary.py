@@ -233,7 +233,7 @@ class TopologySummary:
         
         if self.simplifyDict is not None:
             total = np.prod([len(g) for g in _leaf_groups])
-            assert total < max_subtrees, f"With groups {_leaf_groups}, there will be {total} subtrees, but you have requested only {max_subtrees}, you you need to turn off tree simplification or increase max_subtrees."
+            assert total <= max_subtrees, f"With groups {_leaf_groups}, there will be {total} subtrees, but you have requested only {max_subtrees}, you you need to turn off tree simplification or increase max_subtrees."
         
         leaf_combos = get_leaf_combos(_leaf_groups, max_subtrees)
         counts = defaultdict(int)
