@@ -14,7 +14,7 @@ try: import tskit
 except ImportError:
     pass
 
-def get_combos(groups, max_subtrees, ploidies):
+def get_combos(groups, max_subtrees, ploidies, random_seed=None):
     total_subtrees = np.prod([ploidies[group].sum() for group in groups])
     if total_subtrees <= max_subtrees:
         for combo in itertools.product(*groups):
@@ -22,8 +22,10 @@ def get_combos(groups, max_subtrees, ploidies):
     else:
         #doing only a subset, so need to keep track of how many subtrees have been done
         subtrees_done = 0
+        #random number generator for repeatibility
+        rng = random.Random(random_seed)
         while True:
-            combo = [random.choice(group) for group in groups]
+            combo = [rng.choice(group) for group in groups]
             yield tuple(combo)
             subtrees_done += np.prod(ploidies[combo])
             if subtrees_done >= max_subtrees: break
@@ -41,59 +43,61 @@ def get_combos(groups, max_subtrees, ploidies):
                 #yield tuple(random.choice(group) for group in groups)
 
 
-def contains_interval(intervals, interval):
-    return (intervals[:,0] <= interval[0]) & (interval[1] <= intervals[:,1])
+### The code below has been retired. It was used for stacking topocounts with non-identical sets of intervals, but thanks to Claude.ai, a faster way to do this was divised.
+
+#def contains_interval(intervals, interval):
+    #return (intervals[:,0] <= interval[0]) & (interval[1] <= intervals[:,1])
 
 
-def get_unique_intervals(intervals, verbose=True):
+#def get_unique_intervals(intervals, verbose=True):
     
-    intervals.sort(axis=1)
-    intervals = intervals[intervals[:,1].argsort()]
-    intervals = intervals[intervals[:,0].argsort()]
+    #intervals.sort(axis=1)
+    #intervals = intervals[intervals[:,1].argsort()]
+    #intervals = intervals[intervals[:,0].argsort()]
     
-    intervals = np.unique(intervals, axis=0)
+    #intervals = np.unique(intervals, axis=0)
     
-    starts = intervals[:,0]
-    starts = np.unique(starts)
-    n_starts = starts.shape[0]
+    #starts = intervals[:,0]
+    #starts = np.unique(starts)
+    #n_starts = starts.shape[0]
     
-    ends = intervals[:,1]
-    ends.sort()
-    ends = np.unique(ends)
-    n_ends = ends.shape[0]
+    #ends = intervals[:,1]
+    #ends.sort()
+    #ends = np.unique(ends)
+    #n_ends = ends.shape[0]
     
-    current_start = starts[0]
-    next_start_idx = 1
-    next_end_idx = 0
-    next_start = starts[next_start_idx]
-    next_end = ends[next_end_idx]
+    #current_start = starts[0]
+    #next_start_idx = 1
+    #next_end_idx = 0
+    #next_start = starts[next_start_idx]
+    #next_end = ends[next_end_idx]
     
-    output = []
+    #output = []
     
-    while True:
-        if next_start and next_start <= next_end:
-            if next_start == current_start:
-                #if we get here, the previous end was exactly 1 before the next start, so we jump to the next start
-                next_start_idx += 1
-                next_start = starts[next_start_idx] if next_start_idx < n_starts else None
-            else:
-                #we have to cut before this next start and start again
-                output.append((current_start, next_start-1))
-                current_start = next_start
-                next_start_idx += 1
-                next_start = starts[next_start_idx] if next_start_idx < n_starts else None
-        else:
-            #otherwise we use the end and start at next position
-            output.append((current_start, next_end))
-            current_start = next_end + 1
-            next_end_idx += 1
-            if next_end_idx == n_ends: break
-            next_end = ends[next_end_idx]
+    #while True:
+        #if next_start and next_start <= next_end:
+            #if next_start == current_start:
+                ##if we get here, the previous end was exactly 1 before the next start, so we jump to the next start
+                #next_start_idx += 1
+                #next_start = starts[next_start_idx] if next_start_idx < n_starts else None
+            #else:
+                ##we have to cut before this next start and start again
+                #output.append((current_start, next_start-1))
+                #current_start = next_start
+                #next_start_idx += 1
+                #next_start = starts[next_start_idx] if next_start_idx < n_starts else None
+        #else:
+            ##otherwise we use the end and start at next position
+            #output.append((current_start, next_end))
+            #current_start = next_end + 1
+            #next_end_idx += 1
+            #if next_end_idx == n_ends: break
+            #next_end = ends[next_end_idx]
     
-    #retain only those that are contained within the starting intervals
-    output = [interval for interval in output if np.any(contains_interval(intervals, interval))]
+    ##retain only those that are contained within the starting intervals
+    #output = [interval for interval in output if np.any(contains_interval(intervals, interval))]
     
-    return np.array(output)
+    #return np.array(output)
 
 
 def show_tskit_tree(tree, node_labels=None): print(tree.draw(format="unicode", node_labels=node_labels))
@@ -220,7 +224,22 @@ class Topocounts:
         
         return Topocounts(new_topos, counts_unrooted, totals=self.totals, intervals=self.intervals, label_dict=self.label_dict, rooted=False)
     
-    def simplify(self):
+    def fill_gaps(self, seq_start = None, seq_end = None):
+        
+        if seq_start is not None:
+            assert seq_start <= self.intervals[0,0], "First interval starts before the stated start"
+            self.intervals[0,0] = seq_start
+        
+        if seq_end is not None:
+            assert seq_end >= self.intervals[-1,1], "Last interval ends after the stated end"
+            self.intervals[-1,1] = seq_end
+        
+        for i in range(1, self.intervals.shape[0]):
+            new_start = np.ceil((self.intervals[i-1,1] + self.intervals[i,0])/2) 
+            self.intervals[i,0] = new_start
+            self.intervals[i-1,1] = new_start-1
+    
+    def simplify(self, fill_gaps=True, seq_start = None, seq_end = None):
         new_counts_list = [self.counts[0]]
         new_intervals_list = [self.intervals[0][:]]
         new_totals_list = [self.totals[0]]
@@ -234,10 +253,14 @@ class Topocounts:
                 new_counts_list.append(self.counts[j])
                 new_totals_list.append(self.totals[j])
         
-        return Topocounts(self.topos, np.array(new_counts_list, dtype=int),
-                          totals=np.array(new_totals_list, dtype=int),
-                          intervals=np.array(new_intervals_list), label_dict=self.label_dict, rooted=self.rooted)
-    
+        simplified = Topocounts(self.topos, np.array(new_counts_list, dtype=int),
+                                 totals=np.array(new_totals_list, dtype=int),
+                                 intervals=np.array(new_intervals_list), label_dict=self.label_dict, rooted=self.rooted)
+        
+        if fill_gaps:
+            simplified.fill_gaps(seq_start=seq_start, seq_end=seq_end)
+        
+        return simplified
     
     def split_intervals(self, split_len=None, new_intervals=None):
         #function to split topocounts into a narrower set of intervals
@@ -247,33 +270,47 @@ class Topocounts:
             new_intervals = np.array([(x, x+split_len-1) for x in range(1, int(self.intervals[-1][1]), split_len)])
         else: assert new_intervals is not None, "Either provide a split length or new intervals to define the split locations"
         
-        unique_intervals = get_unique_intervals(np.row_stack([self.intervals, new_intervals]))
+        ncol = self.counts.shape[1]
+        nrow = new_intervals.shape[0]
         
-        n_unique_intervals = len(unique_intervals)
+        dummy_topocounts = Topocounts(topos =self.topos, counts=np.zeros(shape=(nrow,ncol), dtype=int), intervals = new_intervals)
         
-        _counts_ = np.zeros((n_unique_intervals, self.counts.shape[1]), dtype=int)
-        _totals_ = np.zeros(n_unique_intervals, dtype=int)
+        return stack_topocounts([self, dummy_topocounts], silent=True)
+    
+    #def split_intervals(self, split_len=None, new_intervals=None):
+        ##function to split topocounts into a narrower set of intervals
+        ##if new intervals are given, it will be split at those points and return any splits between those points
         
-        #for each iteration we check each of its intervals
-        k=0
-        max_k = self.intervals.shape[0]
-        for j in range(n_unique_intervals):
-            #for each of the unique intervals - if nested within the one of the starting intervals add it
-            if self.intervals[k,0] <= unique_intervals[j,0] and self.intervals[k,1] >= unique_intervals[j,1]:
-                #k contains j
-                _counts_[j,:] = self.counts[k]
-                _totals_[j] = self.totals[k]
+        #if split_len != None:
+            #new_intervals = np.array([(x, x+split_len-1) for x in range(1, int(self.intervals[-1][1]), split_len)])
+        #else: assert new_intervals is not None, "Either provide a split length or new intervals to define the split locations"
+        
+        #unique_intervals = get_unique_intervals(np.row_stack([self.intervals, new_intervals]))
+        
+        #n_unique_intervals = len(unique_intervals)
+        
+        #_counts_ = np.zeros((n_unique_intervals, self.counts.shape[1]), dtype=int)
+        #_totals_ = np.zeros(n_unique_intervals, dtype=int)
+        
+        ##for each iteration we check each of its intervals
+        #k=0
+        #max_k = self.intervals.shape[0]
+        #for j in range(n_unique_intervals):
+            ##for each of the unique intervals - if nested within the one of the starting intervals add it
+            #if self.intervals[k,0] <= unique_intervals[j,0] and self.intervals[k,1] >= unique_intervals[j,1]:
+                ##k contains j
+                #_counts_[j,:] = self.counts[k]
+                #_totals_[j] = self.totals[k]
             
-            if self.intervals[k,1] == unique_intervals[j,1]:
-                #both are ending, so advance k to the next interval in this iteration
-                k += 1
-                if k == max_k: break
+            #if self.intervals[k,1] == unique_intervals[j,1]:
+                ##both are ending, so advance k to the next interval in this iteration
+                #k += 1
+                #if k == max_k: break
         
-        return Topocounts(self.topos, _counts_, _totals_, unique_intervals, self.label_dict)
+        #return Topocounts(self.topos, _counts_, _totals_, unique_intervals, self.label_dict)
     
-    
-    def transfer_intervals(self, interval_len=None, new_intervals=None):
-        #function to transfer topocounts to a new set of intervals
+    def recast(self, interval_len=None, new_intervals=None):
+        #function to project topocounts to a new set of intervals
         #only possible if the totals are the same for all intervals (i.e. no subssampling of combinations)
         #if you just want to split to smaller intervals use split_intervals
         #the resulting counts will be floats because they represent a weighted average
@@ -333,36 +370,123 @@ class Topocounts:
         if include_header: outfile.write("chrom\tstart\tend\n")
         outfile.write("\n".join(["\t".join([chrom, str(self.intervals[i,0]), str(self.intervals[i,1])]) for i in range(len(self.totals))]) + "\n")
 
-def stack_topocounts(topocounts_list, silent=False):
-    #get all unique intervals
-    unique_intervals = get_unique_intervals(np.row_stack([tc.intervals for tc in topocounts_list]))
+# this was the older, slower version. Now retired.
+
+#def stack_topocounts(topocounts_list, silent=False):
+    ##get all unique intervals
+    #unique_intervals = get_unique_intervals(np.row_stack([tc.intervals for tc in topocounts_list]))
     
-    n_unique_intervals = len(unique_intervals)
+    #n_unique_intervals = len(unique_intervals)
     
-    _counts_ = np.zeros((n_unique_intervals, topocounts_list[0].counts.shape[1]), dtype=int)
-    _totals_ = np.zeros(n_unique_intervals, dtype=int)
+    #_counts_ = np.zeros((n_unique_intervals, topocounts_list[0].counts.shape[1]), dtype=int)
+    #_totals_ = np.zeros(n_unique_intervals, dtype=int)
     
-    #for each iteration we check each of its intervals
-    for i in range(len(topocounts_list)):
-        if not silent: print(".", end="", file=sys.stderr, flush=True)
-        k=0
-        intervals = topocounts_list[i].intervals
-        max_k = intervals.shape[0]
-        for j in range(n_unique_intervals):
-            #for each of the unique intervals - if nested within the iteration's intervals, add to the stack
-            if intervals[k,0] <= unique_intervals[j,0] and intervals[k,1] >= unique_intervals[j,1]:
-                #k contains j
-                _counts_[j,:] += topocounts_list[i].counts[k]
-                _totals_[j] += topocounts_list[i].totals[k]
+    ##for each iteration we check each of its intervals
+    #for i in range(len(topocounts_list)):
+        #if not silent: print(".", end="", file=sys.stderr, flush=True)
+        #k=0
+        #intervals = topocounts_list[i].intervals
+        #max_k = intervals.shape[0]
+        #for j in range(n_unique_intervals):
+            ##for each of the unique intervals - if nested within the iteration's intervals, add to the stack
+            #if intervals[k,0] <= unique_intervals[j,0] and intervals[k,1] >= unique_intervals[j,1]:
+                ##k contains j
+                #_counts_[j,:] += topocounts_list[i].counts[k]
+                #_totals_[j] += topocounts_list[i].totals[k]
             
-            if intervals[k,1] == unique_intervals[j,1]:
-                #both are ending, so advance k to the next interval in this iteration
-                k += 1
-                if k == max_k: break
+            #if intervals[k,1] == unique_intervals[j,1]:
+                ##both are ending, so advance k to the next interval in this iteration
+                #k += 1
+                #if k == max_k: break
     
-    if not silent: print("\n", file=sys.stderr, flush=True)
+    #if not silent: print("\n", file=sys.stderr, flush=True)
     
-    return Topocounts(topocounts_list[0].topos, _counts_, _totals_, unique_intervals, topocounts_list[i].label_dict)
+    #return Topocounts(topocounts_list[0].topos, _counts_, _totals_, unique_intervals, topocounts_list[i].label_dict)
+
+#more efficient function from claude.ai
+def stack_topocounts(topocounts_list, silent=False):
+    if len(topocounts_list) == 1:
+        return topocounts_list[0]
+    
+    # Get number of columns from first object
+    n_cols = len(topocounts_list[0].topos)
+    
+    # Step 1: Collect all breakpoints and create events
+    events = []  # (position, event_type, tc_idx, interval_idx)
+    # event_type: 0 = start, 1 = end
+    
+    for tc_idx, tc in enumerate(topocounts_list):
+        for interval_idx, (start, end) in enumerate(tc.intervals):
+            events.append((start, 0, tc_idx, interval_idx))  # start event
+            events.append((end + 1, 1, tc_idx, interval_idx))  # end event (exclusive)
+    
+    # Sort events by position, then by type (starts before ends)
+    events.sort(key=lambda x: (x[0], x[1]))
+    
+    # Step 2: Sweep through events to build merged intervals
+    active_intervals = set()  # Set of (tc_idx, interval_idx) tuples
+    merged_intervals = []
+    merged_counts = []
+    merged_totals = []
+    
+    nevents = len(events)
+    
+    if not silent and nevents >= 100:
+        report = True
+        onePercent = int(np.ceil(nevents/100))
+    else:
+        report = False
+    
+    i = 0
+    while i < nevents:
+        current_pos = events[i][0]
+        
+        # Process all events at current position
+        while i < nevents and events[i][0] == current_pos:
+            pos, event_type, tc_idx, interval_idx = events[i]
+            
+            if event_type == 0:  # start event
+                active_intervals.add((tc_idx, interval_idx))
+            else:  # end event
+                active_intervals.discard((tc_idx, interval_idx))
+            i += 1
+            if report and i % onePercent == 0: print(".", end="", file=sys.stderr, flush=True)
+        
+        # If we have active intervals, create a merged interval
+        if active_intervals:
+            # Find the next position where the active set changes
+            next_pos = current_pos
+            if i < nevents:
+                next_pos = events[i][0]
+            else:
+                # No more events, extend to the last end position
+                # Find the maximum end position among active intervals
+                max_end = current_pos
+                for tc_idx, interval_idx in active_intervals:
+                    end_pos = topocounts_list[tc_idx].intervals[interval_idx][1]
+                    max_end = max(max_end, end_pos)
+                next_pos = max_end + 1
+            
+            # Create interval from current_pos to next_pos-1
+            if next_pos > current_pos:
+                interval_start = current_pos
+                interval_end = next_pos - 1
+                
+                # Sum counts from all active intervals
+                summed_counts = np.zeros(n_cols, dtype=topocounts_list[0].counts.dtype)
+                summed_total = 0
+                for tc_idx, interval_idx in active_intervals:
+                    summed_counts += topocounts_list[tc_idx].counts[interval_idx]
+                    summed_total += topocounts_list[tc_idx].totals[interval_idx]
+                
+                merged_intervals.append([interval_start, interval_end])
+                merged_counts.append(summed_counts)
+                merged_totals.append(summed_total)
+    
+    if report: print("", file=sys.stderr, flush=True)
+    
+    return Topocounts(topos=topocounts_list[0].topos, counts=np.array(merged_counts), totals=np.array(merged_totals), intervals=np.array(merged_intervals), label_dict=topocounts_list[0].label_dict)
+
 
 
 def get_topocounts_tskit(ts, leaf_groups=None, group_names=None, topoDict=None, include_polytomies=False):
@@ -432,9 +556,10 @@ def get_topocounts(trees, leaf_groups, max_subtrees, simplify=True, group_names=
 
 
 def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_subtrees, group_names=None,
-                                   unrooted=False, second_chances=False, multi_pass=True, chrom_start=None, chrom_len=None, silent=True):
+                                   unrooted=False, second_chances=False, multi_pass=True,
+                                   chrom_start=None, chrom_len=None, random_seed=None, silent=True):
     
-    comboGenerator = get_combos(groups, max_subtrees = max_subtrees, ploidies=ploidies)
+    comboGenerator = get_combos(groups, max_subtrees = max_subtrees, ploidies=ploidies, random_seed=random_seed)
     
     topocounts_iterations = []
     
