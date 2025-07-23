@@ -462,7 +462,6 @@ draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="righ
 
     }
 
-
 #code for plotting a summary barplot
 plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=NULL, cols=topo_cols,
                                 x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
@@ -604,59 +603,8 @@ rbindlist <- function(l){
 
 
 palettes = list(
-soft = c(
-"#0178a9",
-"#a9b240",
-"#5db54c",
-"#b8903f",
-"#5c7c36",
-"#855dce",
-"#be53a6",
-"#4870d4",
-"#757eca",
-"#e9007f",
-"#5fb1e6",
-"#ff697e",
-"#f5adfe",
-"#922e47",
-"#e297a7"),
-
-jewel = c(
-"#6e7200",
-"#a51ba7",
-"#5bdf7d",
-"#de0050",
-"#01d4c1",
-"#dd3922",
-"#89a8ff",
-"#639e00",
-"#ff68ae",
-"#3d683f",
-"#ff7d30",
-"#085593",
-"#ffb954",
-"#833475",
-"#91332b"),
-
-paints =c(
-"#7148c0",
-"#cf4859",
-"#69bbb5",
-"#bf763d",
-"#009466",
-"#666ba9",
-"#ff0f37",
-"#8e4b5b",
-"#32c515",
-"#752824",
-"#e877ff",
-"#37400d",
-"#bdbb49",
-"#82c277",
-"#4f7f00"),
-
-sashamaps = c(
-'#4363d8', #chalk blue
+sashamaps = c( #https://sashamaps.net/docs/resources/20-colors/
+'#4363d8', #azure blue
 '#3cb44b', #grass green
 '#ffe119', #custard yellow
 '#e6194b', #pomergranate red
@@ -671,13 +619,13 @@ sashamaps = c(
 '#9a6324', #coconut bown
 '#800000', #red leather
 '#aaffc3', #light sage
-'#808000', #khaki
+'#808000', #olive
 '#ffd8b1', #white skin
 '#bcf60c', #green banana
 '#808080', #grey
 '#fffac8'), #beach sand
 
-alphabet = c(
+alphabet = c( #https://en.wikipedia.org/wiki/Help:Distinguishable_colors
 "#0075DC", #Blue
 "#FFA405", #Orpiment
 "#2BCE48", #Green
@@ -706,22 +654,23 @@ alphabet = c(
 "#808080"), #Iron
 
 
-krzywinski = c(
-"#490092",
-"#009292",
-"#ff6db6",
-"#ffb6db",
-"#004949",
-"#006ddb",
-"#b66dff",
-"#6db6ff",
-"#b6dbff",
-"#920000",
-"#924900",
-"#db6d00",
-"#24ff24",
-"#ffff6d",
-"#000000"),
+krzywinski = c( #https://mk.bcgsc.ca/colorblind/palettes.mhtml#15-color-palette-for-colorbliness
+"#68023F", #104   2  63 imperial purple, tyrian purple, nightclub, pompadour, ribbon, deep cerise, mulberry, mulberry wood, pansy purple, merlot
+"#008169", #  0 129 105 deep sea, generic viridian, observatory, deep sea, elf green, deep green cyan turquoise, tropical rain forest, tropical rain forest, blue green, elf green
+"#EF0096", #239   0 150 vivid cerise, persian rose, fashion fuchsia, hollywood cerise, neon pink, luminous vivid cerise, shocking pink, deep pink, deep pink, fluorescent pink
+"#00DCB5", #  0 220 181 aquamarine, aqua marine, caribbean green, aqua, eucalyptus, vivid opal, brilliant turquoise, shamrock, shamrock, caribbean green
+"#FFCFE2", #255 207 226 light pink, azalea, classic rose, pale pink, classic rose, pastel pink, pink lace, pig pink, orchid pink, chantilly
+"#003C86", #  0  60 134 flat medium blue, royal blue, bay of many, bondi blue, congress blue, cobalt, elvis, darkish blue, submerge, yale blue
+"#9400E6", #148   0 230 vivid purple, violet, purple, veronica, purple, electric purple, purple, vivid mulberry, vivid purple, vivid violet
+"#009FFA", #  0 159 250 azure, luminous vivid cornflower blue, vivid cornflower blue, brilliant azure, bleu de france, dark sky blue, brilliant azure, united nations blue, light brilliant cobalt blue, cornflower
+"#FF71FD", #255 113 253 blush pink, shocking pink, ultra pink, pink flamingo, fuchsia pink, light brilliant orchid, pink flamingo, candy pink, light brilliant magenta, light magenta
+"#7CFFFA", #124 255 250 light brilliant cyan, electric blue, dark slate grey, very light cyan, very light opal, bright cyan, dark slate grey, brilliant cyan, light brilliant opal, bright light blue
+"#6A0213", #106   2  19 burnt crimson, rosewood, claret, venetian red, dark tan, persian plum, prune, deep amaranth, deep reddish brown, crown of thorns
+"#008607", #  0 134   7 india green, ao, green, office green, web green, green, emerald green, islamic green, forest green, forest green
+"#F60239", #246   2  57 american rose, red, carmine, electric crimson, luminous vivid crimson, neon red, carmine red, scarlet, torch red, tractor red
+"#00E307", #  0 227   7 vivid sap green, vivid emerald green, vivid green, vibrant green, vivid green, vivid harlequin, green, radioactive green, vivid malachite green, vivid pistachio
+"#FFDC3D"), #255 220  61 gargoyle gas, filmpro lemon yellow, banana yellow, golden dream, bright sun, broom, banana split, golden dream, twentyfourseven, wild thing
+
 
 safe = c( #from cartomap package
 "#88CCEE",
@@ -746,30 +695,7 @@ cud = c(
 "#D55E00",
 "#CC79A7",
 "#000000",
-"#999999",
-"#F0F0F0",
-"#FF6666",
-"#00FF00",
-"#0000FF",
-"#800080",
-"#FFFF00"),
-
-set3ext = c(
-"#8DD3C7",
-"#FFFFB3",
-"#B3B3CC",
-"#FFCC99",
-"#B3E2CD",
-"#FBB4AE",
-"#CC99FF",
-"#FFB3E6",
-"#FF6666",
-"#D9D9D9",
-"#E6AB02",
-"#FF8C00",
-"#8B008B",
-"#6A5ACD",
-"#3CB371"))
+"#999999"))
 
 show_palettes <- function(){
     par(mfrow = c(length(palettes), 1), mar = c(2,0,2,0))
