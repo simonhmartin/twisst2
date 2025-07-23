@@ -59,7 +59,7 @@ def parse_newick(newick_string):
         # Case 2 & 3: Parse node label and branch length (for both leaf and internal nodes)
         # Node label comes first
         label_start = pos
-        while pos < len(s) and s[pos] not in ':,();': pos += 1
+        while pos < len(s) and s[pos] not in '[:,();': pos += 1
         
         if pos > label_start:
             node_label[current_node_id] = s[label_start:pos].strip()
@@ -70,13 +70,17 @@ def parse_newick(newick_string):
             
             # Parse branch length
             length_start = pos
-            while pos < len(s) and s[pos] not in ',();': pos += 1
+            while pos < len(s) and s[pos] not in '[,();': pos += 1
             
             if pos > length_start:
                 try:
                     branch_length[current_node_id] = float(s[length_start:pos])
-                except ValueError:
-                    pass  # Invalid branch length, keep as None
+                except:
+                    raise ValueError(f"{length_start:pos} not a valid branch length")
+                    #pass  # Invalid branch length, keep as None
+        
+        #progress past anything included beyond branch length
+        while pos < len(s) and s[pos] not in ',();': pos += 1
         
         return current_node_id, pos
     
