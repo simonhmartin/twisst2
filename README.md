@@ -6,8 +6,7 @@
 
 The standard way to run `twisst2` is to start from polarised genotype data. This means you either need to know the ancestral allele at each site, or you need an appropriate outgroup(s) to allow inference of the derived allele.
 
-An alternative way to run it is by first inferring a tree sequence using a different tool like [`tsinfer`](https://tskit.dev/tsinfer/docs/stable/index.html). However, this requires phased and genotypes, and tests suggests that it is less accurate when sample sizes are small.
-
+An alternative way to run it is by first inferring a tree sequence using a different tool like [`tsinfer`](https://tskit.dev/tsinfer/docs/stable/index.html). However, this requires phased and genotypes, and tests suggest that this may be less accurate.
 
 ### Installation
 
@@ -39,7 +38,7 @@ If the vcf file already has the ancestral allele (provided in the `AA` field in 
 Now you can run the `twisst2` to count sub-tree topologies:
 
 ```bash
-twisst2 -i <input_vcf> -o <output_prefix> --max_subtrees 320 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+twisst2 -i <input_vcf> -o <output_prefix> --max_subtrees 512 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
 ```
 
 ### Output
