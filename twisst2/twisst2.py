@@ -634,7 +634,7 @@ def main():
     
     parser.add_argument("--max_subtrees", help="Maximum number of subtrees to consider (note that each combination of diploids represents multiple subtrees)", action = "store", type=int, required=True)
     
-    parser.add_argument("--allow_second_chances", help="Consider SNPs that are separated by incompatible SNPs", action='store_true')
+    parser.add_argument("--no_second_chances", help="Consider SNPs that are separated by incompatible SNPs", action='store_true')
     parser.add_argument("--single_pass", help="Single pass when building trees (only relevant for ploidy > 1, but not recommended)", action='store_true')
     
     #parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
@@ -725,7 +725,7 @@ def main():
         topocounts_stacked = get_topocounts_stacking_sticcs(der_counts, positions, ploidies=ploidies, groups=groups_numeric,
                                                             group_names=group_names, max_subtrees=args.max_subtrees,
                                                             unrooted=args.unrooted, multi_pass=not args.single_pass,
-                                                            second_chances = args.allow_second_chances,
+                                                            second_chances = not args.no_second_chances,
                                                             chrom_start=chrom_start, chrom_len=chrom_len,
                                                             silent= not args.verbose)
         
