@@ -4,9 +4,11 @@
 
 `twisst2` has a number of important improvements over the original [`twisst`](https://github.com/simonhmartin/twisst) tool. Most importantly, `twisst2` **incorporates inference of the tree sequence** - local genealogies and their breakpoints along the chromosome. It does this using [`sticcs`](https://github.com/simonhmartin/sticcs). `sticcs` is a model-free approach and it does not require phased data, so `twisst2` **can run on unphased genotypes of any ploidy**.
 
-The standard way to run `twisst2` is to start from polarised genotype data. This means you either need to know the ancestral allele at each site, or you need an appropriate outgroup(s) to allow inference of the derived allele.
+The methods are described in this [preprint](https://www.biorxiv.org/content/10.1101/2025.07.22.666161v2).
 
-An alternative way to run it is by first inferring a tree sequence using a different tool like [`tsinfer`](https://tskit.dev/tsinfer/docs/stable/index.html). However, this requires phased and genotypes, and tests suggest that this may be less accurate.
+The recommended way to run `twisst2` is to start from polarised genotype data. This means you either need to know the ancestral allele at each site, or you need an appropriate outgroup(s) to allow inference of the derived allele.
+
+An alternative way to run it is by first inferring a tree sequence using a different tool like [`tsinfer`](https://tskit.dev/tsinfer/docs/stable/index.html). However, this requires phased genotypes, and [tests suggest that this may be less accurate](https://www.biorxiv.org/content/10.1101/2025.07.22.666161v2).
 
 ### Installation
 
@@ -26,7 +28,7 @@ pip install -e .
 
 #### Starting from unphased (or phased) genotypes
 
-In standard usage, `twisst2` takes as input a modified vcf file that contains a `DC` field, giving the count of derived alleles for each individual at each site.
+To perform tree inference and topology weighting, `twisst2` takes as input a modified vcf file that contains a `DC` field, giving the count of derived alleles for each individual at each site.
 
 Once you have a vcf file for your genotype data, make the modified version using `sticcs` (this needs to be installed, see above):
 ```bash
@@ -38,7 +40,13 @@ If the vcf file already has the ancestral allele (provided in the `AA` field in 
 Now you can run the `twisst2` to count sub-tree topologies:
 
 ```bash
-twisst2 -i <input_vcf> -o <output_prefix> --max_subtrees 512 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+twisst2 sticcstack -i <input_vcf> -o <output_prefix> --max_subtrees 512 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+```
+
+#### Starting from pre-inferred trees or ARG (e.g. Relate, tsinfer, argweaver, Singer)
+
+```bash
+twisst2 trees -i <input_file> -o <output_prefix> --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
 ```
 
 ### Output
