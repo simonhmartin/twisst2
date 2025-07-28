@@ -7,6 +7,7 @@ import sys
 import itertools
 import numpy as np
 from twisst2.TopologySummary import *
+from twisst2.parse_newick import *
 from sticcs import sticcs
 import cyvcf2
 
@@ -621,32 +622,14 @@ def make_numeric_groups(sizes):
     return np.split(np.arange(sum(sizes)), partitions)
 
 
-def main():
-    ### parse arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_vcf", help="Input VCF file with DC field", action = "store", required=True)
-    parser.add_argument("-o", "--out_prefix", help="Output file prefix", action = "store", required=True)
-    
-    parser.add_argument("--unrooted", help="Unroot topologies (results in fewer topologies)", action = "store_true")
-    
-    parser.add_argument("--ploidy", help="Sample ploidy if all the same. Use --ploidy_file if samples differ.", action = "store", type=int)
-    parser.add_argument("--ploidy_file", help="File with samples names and ploidy as columns", action = "store")
-    
-    parser.add_argument("--max_subtrees", help="Maximum number of subtrees to consider (note that each combination of diploids represents multiple subtrees)", action = "store", type=int, required=True)
-    
-    parser.add_argument("--no_second_chances", help="Consider SNPs that are separated by incompatible SNPs", action='store_true')
-    parser.add_argument("--single_pass", help="Single pass when building trees (only relevant for ploidy > 1, but not recommended)", action='store_true')
-    
-    #parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
-    parser.add_argument("--output_topos", help="Output file for topologies used", action = "store", required = False)
-    parser.add_argument("--group_names", help="Name for each group (separated by spaces)", action='store', nargs="+", required = True)
-    parser.add_argument("--groups", help="Sample IDs for each individual (separated by commas), for each group (separated by spaces)", action='store', nargs="+")
-    parser.add_argument("--groups_file", help="Optional file with a column for sample ID and group", action = "store", required = False)
-    parser.add_argument("--variant_range_only", help="Verbose output", action="store_true")
-    parser.add_argument("--verbose", help="Verbose output", action="store_true")
-    
-    args = parser.parse_args()
-    
+###############################################################################
+###############################################################################
+# Functions below this point are specifically for command line stuff.
+# Probably not useful for the API
+# Chould maybe be in a separate script
+
+
+def parse_groups_command_line(args):
     group_names = args.group_names
     
     ngroups = len(group_names)
@@ -673,6 +656,26 @@ def main():
     sampleIDs = [ID for group in groups for ID in group]
     assert len(sampleIDs) == len(set(sampleIDs)), "Each sample should only be in one group."
     
+    label_dict = dict(zip(range(ngroups), group_names))
+    
+    topoDict = make_topoDict(ngroups, unrooted=args.unrooted)
+    
+    if args.output_topos:
+        with open(args.output_topos, "wt") as tf:
+            tf.write("\n".join([t.as_newick(node_labels=label_dict) for t in topoDict["topos"]]) + "\n")
+    
+    sys.stderr.write("\n".join([t.as_newick(node_labels=label_dict) for t in topoDict["topos"]]) + "\n")
+    
+    return (group_names, groups)
+
+
+def sticcstack_command_line(args):
+    
+    group_names, groups = parse_groups_command_line(args)
+    groups_numeric = make_numeric_groups([len(g) for g in groups])
+    
+    sampleIDs = [ID for group in groups for ID in group]
+    
     #VCF file
     vcf = cyvcf2.VCF(args.input_vcf, samples=sampleIDs)
     
@@ -688,21 +691,6 @@ def main():
     dac_generator = sticcs.parse_vcf_with_DC_field(vcf)
     
     chromLenDict = dict(zip(vcf.seqnames, vcf.seqlens))
-    
-    #get all topologies
-    #if args.inputTopos:
-    
-    label_dict = dict(zip(range(ngroups), group_names))
-    
-    topoDict = make_topoDict(ngroups, unrooted=args.unrooted)
-    
-    if args.output_topos:
-        with open(args.output_topos, "wt") as tf:
-            tf.write("\n".join([t.as_newick(node_labels=label_dict) for t in topoDict["topos"]]) + "\n")
-    
-    sys.stderr.write("\n".join([t.as_newick(node_labels=label_dict) for t in topoDict["topos"]]) + "\n")
-    
-    groups_numeric = make_numeric_groups([len(g) for g in groups])
     
     print(f"\nReading first chromosome...", file=sys.stderr)
     
@@ -730,7 +718,6 @@ def main():
                                                             silent= not args.verbose)
         
         #could potnentially add step merging identical intervals here
-        
         with gzip.open(args.out_prefix + "." + chrom + ".topocounts.tsv.gz", "wt") as outfile:
             topocounts_stacked.write(outfile)
         
@@ -738,6 +725,87 @@ def main():
             topocounts_stacked.write_intervals(outfile, chrom=chrom)
     
     print(f"\nEnd of file reached. Looks like my work is done.", file=sys.stderr)
+
+
+def trees_command_line(args):
+    
+    group_names, groups = parse_groups_command_line(args)
+    groups_numeric = make_numeric_groups([len(g) for g in groups])    
+    leaf_names = [ID for group in groups for ID in group]
+    
+    max_subtrees = np.prod([len(g) for g in groups])
+    
+    if args.input_format == "tskit":
+        ts = tskit.load(args.input_file)
+    
+    elif args.input_format == "argweaver":
+        with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
+            ts = parse_argweaver_file(treesfile, leaf_names=leaf_names)
+    
+    elif args.input_format == "newick":
+        with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
+            ts = parse_newick_file(treesfile, leaf_names=leaf_names)
+    
+    topocounts = get_topocounts(ts.trees(), leaf_groups=groups_numeric, max_subtrees=max_subtrees, unrooted=args.unrooted)
+    
+    with gzip.open(args.out_prefix + ".topocounts.tsv.gz", "wt") as outfile:
+        topocounts.write(outfile)
+    
+    if (args.input_format == "tskit" or args.input_format == "argweaver"):
+        with gzip.open(args.out_prefix + ".intervals.tsv.gz", "wt") as outfile:
+            topocounts.write_intervals(outfile, chrom=args.chrom_name)
+
+    
+
+def main():
+    parser = argparse.ArgumentParser(prog="twisst2")
+    
+    subparsers = parser.add_subparsers(title = "subcommands", dest="mode")
+    subparsers.required = True
+    
+    sticcstack_parser = subparsers.add_parser("sticcstack", help="Compute topology weights from input VCF using sticcstack method")
+    
+    sticcstack_parser.add_argument("-i", "--input_vcf", help="Input VCF file with DC field (make thsi with sticcs prep)", action = "store", required=True)
+    sticcstack_parser.add_argument("-o", "--out_prefix", help="Output file prefix", action = "store", required=True)
+    sticcstack_parser.add_argument("--unrooted", help="Unroot topologies (results in fewer topologies)", action = "store_true")
+    sticcstack_parser.add_argument("--ploidy", help="Sample ploidy if all the same. Use --ploidy_file if samples differ.", action = "store", type=int)
+    sticcstack_parser.add_argument("--ploidy_file", help="File with samples names and ploidy as columns", action = "store")
+    sticcstack_parser.add_argument("--max_subtrees", help="Maximum number of subtrees to consider (note that each combination of diploids represents multiple subtrees)", action = "store", type=int, required=True)
+    sticcstack_parser.add_argument("--no_second_chances", help="Do not consider SNPs that are separated by incompatible SNPs", action='store_true')
+    sticcstack_parser.add_argument("--single_pass", help="Single pass when building trees (only relevant for ploidy > 1, but not recommended)", action='store_true')
+    #sticcstack_parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
+    sticcstack_parser.add_argument("--output_topos", help="Output file for topologies used", action = "store", required = False)
+    sticcstack_parser.add_argument("--group_names", help="Name for each group (separated by spaces)", action='store', nargs="+", required = True)
+    sticcstack_parser.add_argument("--groups", help="Sample IDs for each individual (separated by commas), for each group (separated by spaces)", action='store', nargs="+")
+    sticcstack_parser.add_argument("--groups_file", help="Optional file with a column for sample ID and group", action = "store", required = False)
+    sticcstack_parser.add_argument("--variant_range_only", help="Verbose output", action="store_true")
+    sticcstack_parser.add_argument("--verbose", help="Verbose output", action="store_true")
+    
+    inputtrees_parser = subparsers.add_parser("trees", help="Input trees in tskit, argweaver or newick format")
+    
+    inputtrees_parser.add_argument("-i", "--input_file", help="Input trees file", action = "store", required=True)
+    inputtrees_parser.add_argument("-f", "--input_format", help="Input file format (tskit, argweaver or newick)", choices=["tskit", "argweaver", "newick"], action = "store", required=True)
+    inputtrees_parser.add_argument("-o", "--out_prefix", help="Output file prefix", action = "store", required=True)
+    inputtrees_parser.add_argument("--chrom_name", help="Chromosome name for output intervals file", action = "store", default="unknown_chrom")
+    inputtrees_parser.add_argument("--unrooted", help="Unroot topologies (results in fewer topologies)", action = "store_true")
+    #inputtrees_parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
+    inputtrees_parser.add_argument("--output_topos", help="Output file for topologies used", action = "store", required = False)
+    inputtrees_parser.add_argument("--group_names", help="Name for each group (separated by spaces)", action='store', nargs="+", required = True)
+    inputtrees_parser.add_argument("--groups", help="Sample IDs for each individual (separated by commas), for each group (separated by spaces)", action='store', nargs="+")
+    inputtrees_parser.add_argument("--groups_file", help="Optional file with a column for sample ID and group", action = "store", required = False)
+    inputtrees_parser.add_argument("--verbose", help="Verbose output", action="store_true")
+    
+    ### parse arguments
+    args = parser.parse_args()
+    
+    if args.mode == "sticcstack":
+        sticcstack_command_line(args)
+    
+    if args.mode == "trees":
+        trees_command_line(args)
+    
+
+    
 
 if __name__ == '__main__':
     main()

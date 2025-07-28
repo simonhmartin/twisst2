@@ -107,30 +107,50 @@ from sticcs import sticcs
 # Otherwise the function attempts to convert leaf IDs to integers
 # Internal nodes don't need the same level of consistency, so those will
 # be kept in the order i which they were found, but renumbered so they come after the leaf indices
-def newick_to_sticcs_Tree(newick_string, leaf_idx_dict=None, interval=None):
+def newick_to_sticcs_Tree(newick_string, leaf_idx_dict=None, allow_additional_leaves=False, interval=None):
     
     #first parse newick and number nodes and leaves by order of finding them
     node_children, node_label, branch_length, leaves, parents, root_id = parse_newick(newick_string)
+    #nodes that come out of parse_newick are integers, but they are in the order they were encountered in reading the string, so they are meaningless
+    #What matters is the node_labels, as these are what those nodes were called (i.e. leaf names, but internal nodes can theoretically have labels too)
+    #Now the sticcs tree needs numeric leaves, but these need to start from zero - so they are NOT the same as the nodes that come from parse_newick()
+    #Instead each node_label needs to map to an integer between zero and n_leaves
+    #This can be provided in the leaf_idx_dict
+    #If not, all node_labels need to be integers in the newick string
     
     n_leaves = len(leaves)
     
-    #Dictionary to convert leaf number to new index starting from zero
-    if leaf_idx_dict is not None:
-        new_leaf_IDs = leaf_idx_dict.values()
+    #get the label for each leaf
+    leaf_labels = [node_label[leaf_number] for leaf_number in leaves]
+    assert len(set(leaf_labels)) == n_leaves, "Leaf labels must all be unique."
+    
+    #now, if there is no dictionary provided, we assume leaves are already numbered 0:n-1
+    if not leaf_idx_dict:
+        if not set(leaf_labels) == set([str(i) for i in range(n_leaves)]):
+            raise ValueError("Leaf labels not consecutive integers. Please provide a leaf_idx_dict with consecutive indices from 0 to n_leaves-1")
+        
+        _leaf_idx_dict_ = dict([(label, int(label)) for label in leaf_labels])
     
     else:
-            #assume leaves are integers
-        try:
-            leaf_labels = [node_label[leaf_number] for leaf_number in leaves]
-            new_leaf_IDs = [int(label) for label in leaf_labels]
-            leaf_idx_dict = dict(zip(leaf_labels, new_leaf_IDs))
-        
-        except: raise ValueError("Leaf labels are not numbers. Please provide a leaf_idx_dict to link leaf labels to a numeric value")
+        #We already have the dictionary to convert leaf number to new index
+        _leaf_idx_dict_ = {}
+        _leaf_idx_dict_.update(leaf_idx_dict)
+        assert set(_leaf_idx_dict_.values()) == set(range(len(_leaf_idx_dict_))), "leaf_idx_dict must provide consecutive indices from zero"
+        #Check that all leaves are represented
+        unrepresented_leaves = [label for label in leaf_labels if label not in leaf_idx_dict]
+        if len(unrepresented_leaves) > 0:
+            if allow_additional_leaves:
+                i = len(_leaf_idx_dict_)
+                for leaf_label in sorted(unrepresented_leaves):
+                    _leaf_idx_dict_[leaf_label] = i
+                    i += 1
+            else:
+                raise ValueError("Some leaves are not listed in leaf_idx_dict. Set allow_additional_leaves=True if you want to risk it.")
     
-    assert len(new_leaf_IDs) == n_leaves and max(new_leaf_IDs) == n_leaves-1, "Please provide a leaf_idx_dict with consecutive indices from 0 to n_leaves-1"
+    new_leaf_IDs = sorted(_leaf_idx_dict_.values())
     
     #now assign the new ID to each leaf number (remember leaf numbers in the parsed newick are simply in the order they were encountered)
-    new_node_idx = dict(zip(leaves, [leaf_idx_dict[node_label[leaf_number]] for leaf_number in leaves]))
+    new_node_idx = dict(zip(leaves, [_leaf_idx_dict_[node_label[leaf_number]] for leaf_number in leaves]))
     
     #the new parents are just n_leaves along from where they were
     new_parents = [id+n_leaves for id in parents]
@@ -151,11 +171,74 @@ def newick_to_sticcs_Tree(newick_string, leaf_idx_dict=None, interval=None):
     for item in node_label.items():
         new_node_label[new_node_idx[item[0]]] = item[1]
     
-    objects = {"leaves":sorted(new_leaf_IDs), "root":n_leaves, "parents":new_parents,
+    objects = {"leaves":new_leaf_IDs, "root":n_leaves, "parents":new_parents,
                "node_children": new_node_children, "node_parent":new_node_parent,
                "interval":interval}
     
     return (sticcs.Tree(objects=objects), new_node_label)
+
+
+
+# a class that just holds a bunch of trees, but has a few attributes and methods that resemble a tskit treesequence object
+# This allos us to import newick trees and treat the list as a treesequence for a few things (like my quartet distance calculation)
+class TreeList:
+    def __init__(self, trees):
+        self.num_trees = len(trees)
+        self.tree_list = trees
+    
+    def trees(self):
+        for tree in self.tree_list:
+            yield tree
+
+
+def parse_newick_file(newickfile, leaf_names=None):
+    
+    #if leaves are not integers, need to link each leaf to its index
+    leaf_idx_dict = dict(zip(leaf_names, range(len(leaf_names)))) if leaf_names is not None else None
+    
+    trees = []
+    
+    i = 1
+    
+    for line in newickfile:
+        tree, node_labels = newick_to_sticcs_Tree(line.strip(), leaf_idx_dict=leaf_idx_dict, allow_additional_leaves=True, interval = (i, i))
+        trees.append(tree)
+        i+=1
+    
+    return TreeList(trees)
+
+
+def parse_argweaver_smc(argfile, leaf_names=None):
+    #annoyingly, the trees have numeric leaves, but these are NOT in the order of the haps
+    #The order if given by the first line, so we can figure out which hap each leaf points to
+    
+    #get the order of haps from argweaver output
+    #The position of each number in this list links it to a leaf (leaves are numeric) 
+    leaf_names_reordered = argfile.readline().split()[1:]
+    
+    n_leaves = len(leaf_names_reordered)
+    
+    _leaf_names = leaf_names if leaf_names is not None else [str(i) for i in range(n_leaves)]
+    
+    #link each leaf name to its real index. This is the index that will be used for topology weighting
+    leaf_name_to_idx_dict = dict([(_leaf_names[i], i) for i in range(n_leaves)])
+    
+    #link the leaf number in the current file (which is arbitrary) to its real index
+    leaf_idx_dict = dict([(str(i), leaf_name_to_idx_dict[leaf_names_reordered[i]]) for i in range(n_leaves)])
+    
+    trees = []
+    
+    chrom, chrom_start, chrom_len = argfile.readline().split()[1:]
+    for line in argfile:
+        if line.startswith("TREE"):
+            elements = line.split()
+            interval=(int(elements[1]), int(elements[2]),)
+            tree_newick = elements[3]
+            tree, node_labels = newick_to_sticcs_Tree(tree_newick, leaf_idx_dict=leaf_idx_dict, allow_additional_leaves=True, interval=interval)
+            trees.append(tree)
+    
+    return TreeList(trees)
+
 
 
 def sim_test_newick_parser(n=12, reps=5):
@@ -182,7 +265,6 @@ def sim_test_newick_parser(n=12, reps=5):
 
 
 
-
 # Test the parser
 if __name__ == "__main__":
     
@@ -191,5 +273,10 @@ if __name__ == "__main__":
     #parsed_tree, node_labels = newick_to_sticcs_Tree(newick_string, leaf_idx_dict={"n0":0, "n1":1, "n2":2, "n3":3, "n4":4, "n5": 5})
     #print(parsed_tree.as_newick(node_labels=node_labels))
     
+    #newick_string = '((1,4),((0,3),(2,5)));'
+    #parsed_tree, node_labels = newick_to_sticcs_Tree(newick_string)
+    #print(parsed_tree.as_newick())
+    
     #Auto test multiple times
     sim_test_newick_parser()
+
