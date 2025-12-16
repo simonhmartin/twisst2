@@ -2,13 +2,16 @@
 
 `twisst2` is a tool for [topology weighting](https://doi.org/10.1534/genetics.116.194720). Topology weighting summarises genealogies in terms of the relative abundance of different sub-tree topologies. It can be used to explore processes like introgression and it can aid the identification of trait-associated loci.
 
-`twisst2` has a number of important improvements over the original [`twisst`](https://github.com/simonhmartin/twisst) tool. Most importantly, `twisst2` **incorporates inference of the tree sequence** - local genealogies and their breakpoints along the chromosome. It does this using [`sticcs`](https://github.com/simonhmartin/sticcs). `sticcs` is a model-free approach and it does not require phased data, so `twisst2` **can run on unphased genotypes of any ploidy**.
-
-The methods are described in this [preprint](https://www.biorxiv.org/content/10.1101/2025.07.22.666161v2).
+`twisst2` has a number of important improvements over the original [`twisst`](https://github.com/simonhmartin/twisst) tool. Most importantly, `twisst2` **incorporates inference of the ancestral recombination graph (ARG) or tree sequence** - local genealogies and their breakpoints along the chromosome. It does this using [`sticcs`](https://github.com/simonhmartin/sticcs). `sticcs` is a model-free approach and it does not require phased data, so `twisst2` **can run on unphased genotypes of any ploidy**.
 
 The recommended way to run `twisst2` is to start from polarised genotype data. This means you either need to know the ancestral allele at each site, or you need an appropriate outgroup(s) to allow inference of the derived allele.
 
-An alternative way to run it is by first inferring a tree sequence using a different tool like [`tsinfer`](https://tskit.dev/tsinfer/docs/stable/index.html). However, this requires phased genotypes, and [tests suggest that this may be less accurate](https://www.biorxiv.org/content/10.1101/2025.07.22.666161v2).
+An alternative way to run it is by first inferring the ancestral recombination graph (ARG) tree sequence using a different tool like [Relate](https://myersgroup.github.io/relate/) or [`tsinfer`](https://tskit.dev/tsinfer/docs/stable/index.html). However, this typically requires phased genotypes, and [my tests](https://doi.org/10.1093/genetics/iyaf181) suggest that `twisst2+sticcs` is more accurate than other methods anyway.
+
+# Publications
+- The general concept of topology weighting is described by [Martin and Van Belleghem 2017](https://doi.org/10.1534/genetics.116.194720).
+- Combining genealogy inference with `sticcs` and topology weighting with `twisst2` is described by [Martin 2025](https://doi.org/10.1093/genetics/iyaf181).
+
 
 ### Installation
 
@@ -51,8 +54,8 @@ twisst2 trees -i <input_file> -o <output_prefix> --groups <groupname1> <groupnam
 
 ### Output
 
-* `<output_prefix>.topocounts.tsv.gz` gives the count of each group tree topology for each interval.
-* `<output_prefix>.intervals.tsv.gz` gives the chromosome, start and end position of each interval.
+- `<output_prefix>.topocounts.tsv.gz` gives the count of each group tree topology for each interval.
+- `<output_prefix>.intervals.tsv.gz` gives the chromosome, start and end position of each interval.
 
 ### R functions for plotting
 
