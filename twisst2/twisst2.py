@@ -740,7 +740,7 @@ def trees_command_line(args):
     
     elif args.input_format == "argweaver":
         with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
-            ts = parse_argweaver_file(treesfile, leaf_names=leaf_names)
+            ts = parse_argweaver_smc(treesfile, leaf_names=leaf_names)
     
     elif args.input_format == "newick":
         with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
