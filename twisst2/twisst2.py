@@ -776,9 +776,9 @@ def main():
     #sticcstack_parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
     sticcstack_parser.add_argument("--output_topos", help="Output file for topologies used", action = "store", required = False)
     sticcstack_parser.add_argument("--group_names", help="Name for each group (separated by spaces)", action='store', nargs="+", required = True)
-    sticcstack_parser.add_argument("--groups", help="Sample IDs for each individual (separated by commas), for each group (separated by spaces)", action='store', nargs="+")
+    sticcstack_parser.add_argument("--groups", help="Sample IDs (separated by commas) for each group (separated by spaces)", action='store', nargs="+")
     sticcstack_parser.add_argument("--groups_file", help="Optional file with a column for sample ID and group", action = "store", required = False)
-    sticcstack_parser.add_argument("--variant_range_only", help="Verbose output", action="store_true")
+    sticcstack_parser.add_argument("--variant_range_only", help="Do not extend first and last trees to the ends of the chromosome.", action="store_true")
     sticcstack_parser.add_argument("--verbose", help="Verbose output", action="store_true")
     
     inputtrees_parser = subparsers.add_parser("trees", help="Input trees in tskit, argweaver or newick format")
@@ -791,7 +791,7 @@ def main():
     #inputtrees_parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
     inputtrees_parser.add_argument("--output_topos", help="Output file for topologies used", action = "store", required = False)
     inputtrees_parser.add_argument("--group_names", help="Name for each group (separated by spaces)", action='store', nargs="+", required = True)
-    inputtrees_parser.add_argument("--groups", help="Sample IDs for each individual (separated by commas), for each group (separated by spaces)", action='store', nargs="+")
+    inputtrees_parser.add_argument("--groups", help="Sample IDs (separated by commas) for each group (separated by spaces)", action='store', nargs="+")
     inputtrees_parser.add_argument("--groups_file", help="Optional file with a column for sample ID and group", action = "store", required = False)
     inputtrees_parser.add_argument("--verbose", help="Verbose output", action="store_true")
     
