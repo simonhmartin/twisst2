@@ -57,6 +57,43 @@ twisst2 trees -i <input_file> -o <output_prefix> --groups <groupname1> <groupnam
 - `<output_prefix>.topocounts.tsv.gz` gives the count of each group tree topology for each interval.
 - `<output_prefix>.intervals.tsv.gz` gives the chromosome, start and end position of each interval.
 
+### Full command options
+
+#### Topology weighting from VCF: `twisst2 sticcstack`
+
+ | Command Option | Value type | Description | Required? |
+ |-----------------|---------------|------------|-------------|
+ | `-i`, `--input_vcf` | FILE | Input VCF file with DC field (make thsi with sticcs prep) | Required |
+ | `-o`, `--out_prefix` | CHAR | Output file prefix | Required |
+ | `--group_names` | CHAR | Name for each group (separated by spaces) | Required unless `--groups_file` is specified |
+ | `--groups` | CHAR | Sample IDs (separated by commas) for each group (separated by spaces) | Required unless `--groups_file` is specified |
+ | `--groups_file` | FILE | Optional file with a column for sample ID and group | Required unless `--groups` and `--group_names` are specified |
+ | `--max_subtrees` | INT | Maximum number of subtrees to consider; we recommend 512 as a good compromise between speed and accuracy | Required |
+ | `--ploidy` | INT | Sample ploidy if all the same. Use `--ploidy_file` if samples differ. | Defaults to 2 if not specified and `--ploidy_file` not specified |
+ | `--ploidy_file` | FILE | File with two columns for sample ID and ploidy, separated by whitespace | Required if ploidy differs among individuals |
+ | `--output_topos` | FILE | Output file for topologies used | Optional |
+ | `--variant_range_only` | | Do not extend first and last trees to the ends of the chromosome; use this for region-specific analyses | Optional |
+ | `--unrooted` | | Unroot topologies (results in fewer topologies and therefore fewer counts in the output) | Optional |
+ | `--no_second_chances` | | Do not consider SNPs that are separated by incompatible SNPs | Optional, not recommend |
+ | `--single_pass` | | Single pass when building trees. Only relevant for ploidy > 1 | Optional, not recommended |
+ | `--verbose` | | Verbose output | Optional |
+
+#### Topology weighting from tree sequence: `twisst2 trees`
+ 
+ | Command Option | Value type | Description | Required? |
+ |-----------------|---------------|------------|-------------|
+ | `-i`, `--input_file` | FILE | Input trees file | Required |
+ | `-f`, `--input_format` | CHAR | Input file format {tskit, argweaver, newick} | Required |
+ | `-o`, `--out_prefix` | CHAR | Output file prefix | Required |
+ | `--chrom_name` | CHAR | Chromosome name for output intervals file | Defaults to 'unknown_chrom' |
+ | `--unrooted` | | Unroot topologies (results in fewer topologies and therefore fewer counts in the output) | Optional |
+ | `--output_topos` | FILE | Output file for topologies used | Optional |
+ | `--group_names` | CHAR | Name for each group (separated by spaces) | Required unless `--groups_file` is specified |
+ | `--groups` | CHAR | Sample IDs (separated by commas) for each group (separated by spaces) | Required unless `--groups_file` is specified |
+ | `--groups_file` | FILE | Optional file with a column for sample ID and group | Required unless `--groups` and `--group_names` are specified |
+ | `--verbose` | | Verbose output | Optional |
+
+
 ### R functions for plotting
 
 Some functions for importing and plotting are provided in the `plot_twisst/plot_twisst.R` script. For examples of how to use these functions, see the `plot_twisst/example_plot.R` script.
