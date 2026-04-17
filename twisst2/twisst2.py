@@ -584,6 +584,11 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
         
         usable_sites = np.where(no_missing & variable)
         
+        #Skip if there are no usable SNPs for this combination of individuals
+        if len(usable_sites[0]) == 0:
+            print(f"\nWARNING: No usable SNPs for sample combo {iteration+1}. Skipping...", file=sys.stderr, flush=True)
+            continue
+        
         #der counts and positions
         der_counts_sub = der_counts_sub[usable_sites]
         
@@ -603,6 +608,11 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
                                     group_names=group_names, max_subtrees=max_subtrees, unrooted=unrooted) #here we specify max subtrees, but really each combination will usually have a much smaller number of subtrees than the overall max requested
         
         topocounts_iterations.append(topocounts.simplify())
+    
+    if topocounts_iterations == []:
+        if not silent:
+            print(f"\nWARNING: No topocounts were recorded.", file=sys.stderr)
+        return None
     
     if not silent:
         print(f"\nStacking", file=sys.stderr)
@@ -692,7 +702,7 @@ def sticcstack_command_line(args):
     
     chromLenDict = dict(zip(vcf.seqnames, vcf.seqlens))
     
-    print(f"\nReading first chromosome...", file=sys.stderr)
+    print(f"\nReading vcf...", file=sys.stderr)
     
     for chrom, positions, der_counts in dac_generator:
         
@@ -716,6 +726,10 @@ def sticcstack_command_line(args):
                                                             second_chances = not args.no_second_chances,
                                                             chrom_start=chrom_start, chrom_len=chrom_len,
                                                             silent= not args.verbose)
+        
+        if topocounts_stacked is None:
+            print(f"\nWARNING: No data to export for {chrom}. Skipping...", file=sys.stderr)
+            continue
         
         #could potnentially add step merging identical intervals here
         with gzip.open(args.out_prefix + "." + chrom + ".topocounts.tsv.gz", "wt") as outfile:
