@@ -586,7 +586,8 @@ def get_topocounts_stacking_sticcs(der_counts, positions, ploidies, groups, max_
         
         #Skip if there are no usable SNPs for this combination of individuals
         if len(usable_sites[0]) == 0:
-            print(f"\nWARNING: No usable SNPs for sample combo {iteration+1}. Skipping...", file=sys.stderr, flush=True)
+            if not silent:
+                print(f"\nWARNING: No usable SNPs for sample combo {iteration+1}. Skipping...", file=sys.stderr, flush=True)
             continue
         
         #der counts and positions
