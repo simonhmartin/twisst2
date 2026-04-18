@@ -548,7 +548,8 @@ def get_topocounts(trees, leaf_groups, max_subtrees, simplify=True, group_names=
     
     for i,tree in enumerate(trees):
         #only include trees with exactly one root. This is relevant because tsinfer can make multi-root trees
-        if len(tree.roots) != 1: continue
+        try: tree.root
+        except: continue
         topoSummary = TopologySummary(tree, leafGroupDict)
         counts_dict = topoSummary.get_topology_counts(leaf_groups, max_subtrees=max_subtrees, unrooted=unrooted)
         counts.append([counts_dict[ID] for ID in topoIDs])
