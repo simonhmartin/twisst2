@@ -527,25 +527,29 @@ def get_topocounts_tskit(ts, leaf_groups=None, group_names=None, topoDict=None, 
     return Topocounts(topos, counts, totals, intervals, label_dict)
 
 
-def get_topocounts(trees, leaf_groups, max_subtrees, simplify=True, group_names=None, topoDict=None, unrooted=False):
-    
+def get_topocounts(trees, leaf_groups, max_subtrees, simplify=True, group_names=None, topoDict=None, unrooted=False, silent=True, n_trees=None):
+
     ngroups = len(leaf_groups)
     label_dict = dict(zip(range(ngroups), group_names if group_names else ("group"+str(i) for i in range(1, ngroups+1))))
-    
+
     if not topoDict:
         topoDict = make_topoDict(ngroups, unrooted)
-    
+
     topos = topoDict["topos"]
     topoIDs = topoDict["topoIDs"]
-    
+
     counts = []
-    
+
     totals = []
-    
+
     intervals = []
-    
+
     leafGroupDict = makeGroupDict(leaf_groups) if simplify else None
-    
+
+    # Initialise progress bar
+    report = not silent and n_trees is not None and n_trees >= 100
+    onePercent = int(np.ceil(n_trees / 100)) if report else None # Will incrememt in 1s% (ntrees / 100)
+
     for i,tree in enumerate(trees):
         #only include trees with exactly one root. This is relevant because tsinfer can make multi-root trees
         try: tree.root
@@ -555,7 +559,10 @@ def get_topocounts(trees, leaf_groups, max_subtrees, simplify=True, group_names=
         counts.append([counts_dict[ID] for ID in topoIDs])
         totals.append(sum(counts_dict.values()))
         intervals.append(tree.interval)
-    
+        if report and (i + 1) % onePercent == 0: print(".", end="", file=sys.stderr, flush=True) # increment pbar
+
+    if report: print("", file=sys.stderr, flush=True)
+
     return Topocounts(topos, np.array(counts, dtype=int), np.array(totals, dtype=int), np.array(intervals, dtype=float), label_dict)
 
 
@@ -679,7 +686,7 @@ def parse_groups_command_line(args):
             tf.write("\n".join([t.as_newick(node_labels=label_dict) for t in topoDict["topos"]]) + "\n")
     
     sys.stderr.write("\n".join([t.as_newick(node_labels=label_dict) for t in topoDict["topos"]]) + "\n")
-    
+
     return (group_names, groups)
 
 
@@ -764,7 +771,9 @@ def trees_command_line(args):
         with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
             ts = parse_newick_file(treesfile, leaf_names=leaf_names)
     
-    topocounts = get_topocounts(ts.trees(), leaf_groups=groups_numeric, max_subtrees=max_subtrees, unrooted=args.unrooted)
+    n_trees = ts.num_trees if args.input_format in ("tskit", "argweaver") else None
+    topocounts = get_topocounts(ts.trees(), leaf_groups=groups_numeric, max_subtrees=max_subtrees, unrooted=args.unrooted,
+                                silent=False, n_trees=n_trees)
     
     with gzip.open(args.out_prefix + ".topocounts.tsv.gz", "wt") as outfile:
         topocounts.write(outfile)
