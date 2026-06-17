@@ -49,8 +49,9 @@ twisst2 sticcstack -i <input_vcf> -o <output_prefix> --max_subtrees 512 --ploidy
 #### Starting from pre-inferred trees or ARG (e.g. Relate, tsinfer, argweaver, Singer)
 
 ```bash
-twisst2 trees -i <input_file> -o <output_prefix> --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+twisst2 trees --input_format <tskit/argweaver/newick> -o <output_prefix> --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
 ```
+Note that when providing a tskit tree sequence, leaf IDs for each group should match the numeric IDs in the tree sequence (no attempt is made to extract tip metadata).
 
 ### Output
 
