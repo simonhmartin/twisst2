@@ -755,23 +755,29 @@ def sticcstack_command_line(args):
 def trees_command_line(args):
     
     group_names, groups = parse_groups_command_line(args)
-    groups_numeric = make_numeric_groups([len(g) for g in groups])    
-    leaf_names = [ID for group in groups for ID in group]
-    
-    max_subtrees = np.prod([len(g) for g in groups])
     
     if args.input_format == "tskit":
+        #if importing a tskit tree sequence, the groups should already correspond to the numeric leaf node IDs
+        groups_numeric = [[int(i) for i in group] for group in groups]
         ts = tskit.load(args.input_file)
     
-    elif args.input_format == "argweaver":
-        with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
-            ts = parse_argweaver_smc(treesfile, leaf_names=leaf_names)
+    else:
+        #if reading newick or argweaver format, the groups comprise sample IDs.
+        #We need to link these to numeric leaf indices. This happens during newick parsing
+        groups_numeric = make_numeric_groups([len(g) for g in groups])    
+        leaf_names = [ID for group in groups for ID in group]
+        
+        if args.input_format == "argweaver":
+            with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
+                ts = parse_argweaver_smc(treesfile, leaf_names=leaf_names)
+        
+        elif args.input_format == "newick":
+            with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
+                ts = parse_newick_file(treesfile, leaf_names=leaf_names)
     
-    elif args.input_format == "newick":
-        with gzip.open(args.input_file, "rt") if args.input_file.endswith(".gz") else open(args.input_file, "rt") as treesfile:
-            ts = parse_newick_file(treesfile, leaf_names=leaf_names)
-    
-    n_trees = ts.num_trees if args.input_format in ("tskit", "argweaver") else None
+    max_subtrees = np.prod([len(g) for g in groups])
+    n_trees = ts.num_trees
+    #n_trees = ts.num_trees if args.input_format in ("tskit", "argweaver") else None # This was an old line but I no longer understand why I included it (August 2026)
     topocounts = get_topocounts(ts.trees(), leaf_groups=groups_numeric, max_subtrees=max_subtrees, unrooted=args.unrooted,
                                 silent=False, n_trees=n_trees)
     
