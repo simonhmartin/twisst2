@@ -43,13 +43,13 @@ If the vcf file already has the ancestral allele (provided in the `AA` field in 
 Now you can run the `twisst2` to count sub-tree topologies:
 
 ```bash
-twisst2 sticcstack -i <input_vcf> -o <output_prefix> --max_subtrees 512 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+twisst2 sticcstack -i <input_vcf> -o <output_prefix> --max_subtrees 512 --ploidy 2 --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file <groups file name> --verbose
 ```
 
 #### Starting from pre-inferred trees or ARG (e.g. Relate, tsinfer, argweaver, Singer)
 
 ```bash
-twisst2 trees --input_format <tskit/argweaver/newick> -o <output_prefix> --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file
+twisst2 trees --input_format <tskit/argweaver/newick> -o <output_prefix> --groups <groupname1> <groupname2> <groupname3> <groupname4> --groups_file <groups file name> --verbose
 ```
 Note that when providing a tskit tree sequence, leaf IDs for each group should match the numeric IDs in the tree sequence (no attempt is made to extract tip metadata).
 
@@ -71,7 +71,7 @@ Note that when providing a tskit tree sequence, leaf IDs for each group should m
  | `--groups_file` | FILE | Optional file with a column for sample ID and group | Required unless `--groups` and `--group_names` are specified |
  | `--max_subtrees` | INT | Maximum number of subtrees to consider; we recommend 512 as a good compromise between speed and accuracy | Required |
  | `--ploidy` | INT | Sample ploidy if all the same. Use `--ploidy_file` if samples differ. | Defaults to 2 if not specified and `--ploidy_file` not specified |
- | `--ploidy_file` | FILE | File with two columns for sample ID and ploidy, separated by whitespace | Required if ploidy differs among individuals |
+ | `--ploidy_file` | FILE | File with two columns for sample ID and ploidy, separated by whitespace | Required if ploidy varies among individuals |
  | `--output_topos` | FILE | Output file for topologies used | Optional |
  | `--variant_range_only` | | Do not extend first and last trees to the ends of the chromosome; use this for region-specific analyses | Optional |
  | `--unrooted` | | Unroot topologies (results in fewer topologies and therefore fewer counts in the output) | Optional |
@@ -90,7 +90,7 @@ Note that when providing a tskit tree sequence, leaf IDs for each group should m
  | `--unrooted` | | Unroot topologies (results in fewer topologies and therefore fewer counts in the output) | Optional |
  | `--output_topos` | FILE | Output file for topologies used | Optional |
  | `--group_names` | CHAR | Name for each group (separated by spaces) | Required unless `--groups_file` is specified |
- | `--groups` | CHAR | Sample IDs (separated by commas) for each group (separated by spaces) | Required unless `--groups_file` is specified |
+ | `--groups` | CHAR | Sample IDs (separated by commas) for each group (separated by spaces); must be numeric if using tskit format | Required unless `--groups_file` is specified |
  | `--groups_file` | FILE | Optional file with a column for sample ID and group | Required unless `--groups` and `--group_names` are specified |
  | `--verbose` | | Verbose output | Optional |
 
