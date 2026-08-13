@@ -680,6 +680,7 @@ def parse_groups_command_line(args):
     label_dict = dict(zip(range(ngroups), group_names))
     
     if args.mode == "trees" and args.input_format == "tskit":
+        assert not args.unrooted, "Option --unrooted is currently not supported with tskit input format."
         topoDict = make_topoDict_tskit(ngroups)
     else:
         topoDict = make_topoDict(ngroups, unrooted=args.unrooted)
