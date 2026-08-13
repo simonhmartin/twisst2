@@ -679,7 +679,10 @@ def parse_groups_command_line(args):
     
     label_dict = dict(zip(range(ngroups), group_names))
     
-    topoDict = make_topoDict(ngroups, unrooted=args.unrooted)
+    if args.mode == "trees" and args.input_format == "tskit":
+        topoDict = make_topoDict_tskit(ngroups)
+    else:
+        topoDict = make_topoDict(ngroups, unrooted=args.unrooted)
     
     if args.output_topos:
         with open(args.output_topos, "wt") as tf:
